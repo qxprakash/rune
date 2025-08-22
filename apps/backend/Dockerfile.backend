@@ -1,0 +1,24 @@
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+
+# Install uv without cache
+RUN pip install --no-cache-dir uv
+
+# Copy only dependency manifests first for better layer caching
+COPY pyproject.toml ./
+COPY uv.lock ./
+
+# Install dependencies (will create a local .venv by default)
+RUN uv sync --frozen
+
+# Copy the rest of the application
+COPY . .
+
+# Ensure dependencies are in sync after copying the project
+RUN uv sync --frozen
+
+# Expose FastAPI
+EXPOSE 8000
+
+CMD ["uvicorn", "rune.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

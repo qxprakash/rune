@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: rune_db
+    restart: always
+    environment:
+      POSTGRES_USER: rune
+      POSTGRES_PASSWORD: rune
+      POSTGRES_DB: rune
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: rune_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ../apps/backend
+      dockerfile: Dockerfile.backend
+    container_name: rune_backend
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgres://rune:rune@db:5432/rune
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ../apps/frontend
+      dockerfile: Dockerfile.frontend
+    container_name: rune_frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:

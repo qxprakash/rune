@@ -283,7 +283,7 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
         if job.backend == ModelBackend.ollama:
             runner = runner_class(job.model_name)
         else:
-            runner = runner_class()
+            runner = runner_class(job.model_name)
 
         # Execute the job
         result = await runner.run(job.prompt, job.parameters)

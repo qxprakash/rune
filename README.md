@@ -171,45 +171,6 @@ REDIS_URL=redis://localhost:6379/0
 SQLALCHEMY_ECHO=0
 ```
 
-## 📊 Supported Backends
-
-### Ollama
-- **Status**: ✅ Fully implemented
-- **Models**: Any model available in your local Ollama installation
-- **Check models**: `curl http://localhost:11434/api/tags`
-
-### MLX (Apple Silicon)
-- **Status**: 🚧 Coming soon
-- **Target**: Optimized inference for M-series chips
-- **Use case**: Efficient local inference on MacBooks
-
-### Custom Backends
-- **Status**: 🔧 Extensible architecture
-- **Examples**: vLLM, TensorRT, ONNX Runtime, Hugging Face Transformers
-
-## 🎯 Roadmap
-
-### Phase 1 (✅ Complete)
-- [x] Core API infrastructure
-- [x] PostgreSQL integration with Alembic
-- [x] Ollama backend runner
-- [x] Job queue and status tracking
-- [x] Model registry and management
-- [x] Interactive API documentation
-
-### Phase 2 (🚧 Next)
-- [ ] Async job processing with Redis/RQ
-- [ ] MLX backend for Apple Silicon
-- [ ] Next.js frontend dashboard
-- [ ] WebSocket job status updates
-- [ ] Batch job processing
-
-### Phase 3 (🔮 Future)
-- [ ] Workflow automation and chaining
-- [ ] Multi-user authentication
-- [ ] Model performance analytics
-- [ ] Cluster mode (multiple machines)
-- [ ] Plugin system for community runners
 
 ## 🐛 Troubleshooting
 
@@ -259,4 +220,4 @@ MIT License - see LICENSE file for details
 - [FastAPI](https://fastapi.tiangolo.com/) for the excellent API framework
 - [Ollama](https://ollama.com/) for local LLM inference
 - [SQLAlchemy](https://sqlalchemy.org/) for database management
-- Inspired by [Replicate](https://replicate.com/) and [RunPod](https://runpod.io/)
+- Inspired by [RunPod](https://runpod.io/)

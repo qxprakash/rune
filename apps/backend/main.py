@@ -10,6 +10,9 @@ from loguru import logger
 from api.routes import router
 from db.session import engine
 
+# Global worker manager
+embedded_worker_manager = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,7 +29,38 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
 
+    # Start embedded workers
+    try:
+        import os
+
+        from workers.embedded_worker import EmbeddedWorkerManager
+
+        global embedded_worker_manager
+
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        num_workers = int(os.getenv("NUM_WORKERS", "1"))
+
+        embedded_worker_manager = EmbeddedWorkerManager(redis_url)
+        success = await embedded_worker_manager.start(num_workers)
+
+        if success:
+            logger.info(f"Started {num_workers} embedded worker(s)")
+        else:
+            logger.warning("Redis workers not available, will use fallback processing")
+
+    except Exception as e:
+        logger.warning(f"Failed to start embedded workers: {e}")
+        logger.info("Jobs will use fallback processing")
+
     yield
+
+    # Cleanup embedded workers on shutdown
+    try:
+        if "embedded_worker_manager" in globals() and embedded_worker_manager:
+            await embedded_worker_manager.stop()
+            logger.info("Stopped embedded workers")
+    except Exception as e:
+        logger.error(f"Error stopping embedded workers: {e}")
 
     logger.info("Shutting down AI Playground Backend")
 

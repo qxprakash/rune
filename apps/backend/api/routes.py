@@ -26,7 +26,6 @@ from schemas import (
     ModelUpdate,
 )
 from utils.system_monitor import SystemMonitor
-from workers.job_processor import enqueue_job, get_queue_status
 
 router = APIRouter()
 
@@ -295,25 +294,41 @@ async def create_job(
 
     logger.info(f"Created job {job.id} for model {model_name}")
 
-    # Enqueue the job for async processing
+    # Try to use embedded worker queue first, fallback to synchronous processing
     try:
-        queue_job_id = enqueue_job(job.id)
+        from main import embedded_worker_manager
+
+        if embedded_worker_manager:
+            queue_job_id = embedded_worker_manager.enqueue_job(job.id)
+            if queue_job_id:
+                return JobCreateResponse(
+                    job_id=job.id,
+                    message=f"Job created and queued (queue ID: {queue_job_id})",
+                )
+            else:
+                logger.warning("Failed to enqueue job, falling back to synchronous processing")
+        else:
+            logger.info("No embedded workers available, using synchronous processing")
+
+        # Synchronous fallback processing
+        await _execute_job(job.id, db)
         return JobCreateResponse(
             job_id=job.id,
-            message=f"Job created and queued (queue ID: {queue_job_id})",
+            message="Job created and processed synchronously",
         )
+
     except Exception as e:
-        # If queueing fails, update job status to failed
+        # If all processing fails, update job status to failed
         ai_crud.update_job_status(
             db,
             job_id=job.id,
             status=JobStatus.failed,
-            error_message=f"Failed to queue job: {str(e)}",
+            error_message=f"Failed to process job: {str(e)}",
             completed_at=datetime.utcnow(),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to queue job: {str(e)}",
+            detail=f"Failed to process job: {str(e)}",
         )
 
 
@@ -394,7 +409,10 @@ async def create_batch_jobs(
             )
 
             # Enqueue the job
-            enqueue_job(job.id)
+            from main import embedded_worker_manager
+
+            if embedded_worker_manager:
+                embedded_worker_manager.enqueue_job(job.id)
 
             created_jobs.append(job.id)
             logger.info(f"Batch {batch_id}: Created job {job.id} for model {job_data.model_name}")
@@ -424,7 +442,17 @@ async def create_batch_jobs(
 async def get_queue_status_endpoint() -> dict:
     """Get job queue status and statistics."""
     try:
-        return get_queue_status()
+        from main import embedded_worker_manager
+
+        if embedded_worker_manager:
+            return embedded_worker_manager.get_queue_status()
+        else:
+            return {
+                "error": "No embedded workers available",
+                "queued_jobs": 0,
+                "failed_jobs": 0,
+                "workers": 0,
+            }
     except Exception as e:
         logger.error(f"Failed to get queue status: {e}")
         return {
@@ -451,6 +479,32 @@ async def get_process_info() -> dict:
 async def check_dependencies() -> dict:
     """Check availability of AI/ML dependencies and tools."""
     return SystemMonitor.check_dependencies()
+
+
+@router.get("/workers/status")
+async def get_workers_status_endpoint() -> dict:
+    """Get status of embedded worker processes."""
+    try:
+        from main import embedded_worker_manager
+
+        if embedded_worker_manager:
+            return embedded_worker_manager.get_worker_status()
+        else:
+            return {
+                "total_workers": 0,
+                "active_workers": 0,
+                "dead_workers": 0,
+                "workers": [],
+                "error": "No embedded workers available",
+            }
+    except Exception as e:
+        return {
+            "total_workers": 0,
+            "active_workers": 0,
+            "dead_workers": 0,
+            "workers": [],
+            "error": str(e),
+        }
 
 
 # Helper Functions

@@ -1,122 +1,262 @@
-# Rune
+# Rune AI Playground
 
-A lightweight AI orchestration dev stack: FastAPI backend + Next.js dashboard, backed by Postgres and Redis. Spin it up in one command with Docker.
+A self-hosted AI inference platform that turns your spare hardware into a mini-Replicate. Run, queue, and automate AI models locally with a clean API interface.
 
-## Quick start
+## 🚀 Features
+
+- **Multi-Model Support**: Ollama, MLX (coming soon), and custom backends
+- **REST API**: Auto-generated endpoints for every registered model
+- **Job Management**: Queue, track, and retry inference jobs
+- **Model Registry**: Manage model configurations and metadata
+- **History Tracking**: Complete audit trail of all inference runs
+- **Database Persistence**: PostgreSQL for reliable data storage
+- **Auto Documentation**: Interactive API docs via FastAPI
+
+## Quick Start
 
 Prerequisites:
 - Docker Desktop (with Compose v2)
+- Ollama running locally (for Ollama backend)
 
-From the repo root, either:
+### Option 1: Full Stack with Docker
 
-```zsh
-# Option A: run from the docker folder (shortest command)
+```bash
+# Start all services
 cd docker
 docker compose up --build
+
+# Visit:
+# - API Documentation: http://localhost:8000/docs
+# - Backend Health: http://localhost:8000/api/health
 ```
 
-or:
+### Option 2: Backend Only (Development)
 
-```zsh
-# Option B: run from repo root with an explicit compose file
-docker compose -f docker/docker-compose.yml up --build
+```bash
+cd apps/backend
+
+# Setup environment
+uv sync
+uv run alembic upgrade head
+
+# Start backend
+uv run python main.py
+
+# API will be available at http://localhost:8000
 ```
 
-Then visit:
-- Frontend (Next.js): http://localhost:3000
-- Backend (FastAPI docs): http://localhost:8000/docs
-- Postgres: localhost:5432 (user: rune, password: rune, db: rune)
-- Redis: localhost:6379
+## 🔧 API Usage
 
-To stop everything:
-
-```zsh
-# If you ran from the docker folder, stop there
-docker compose down
-# Remove volumes (drops the Postgres data volume)
-docker compose down -v
+### 1. Health Check
+```bash
+curl http://localhost:8000/api/health
 ```
 
-## What gets started
+### 2. Register a Model
+```bash
+curl -X POST http://localhost:8000/api/models \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "llama3.2:3b",
+    "backend": "ollama",
+    "description": "Llama 3.2 3B model via Ollama",
+    "config": {
+      "temperature": 0.7,
+      "max_tokens": 2000
+    }
+  }'
+```
 
-Compose file: `docker/docker-compose.yml`
+### 3. Run Inference
+```bash
+curl -X POST http://localhost:8000/api/run/llama3.2:3b \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Hello! Please introduce yourself.",
+    "parameters": {
+      "temperature": 0.8,
+      "max_tokens": 150
+    }
+  }'
+```
 
-Services:
-- db: `postgres:16-alpine` exposed on 5432 with a persistent volume
-- redis: `redis:7-alpine` exposed on 6379
-- backend: FastAPI app on http://localhost:8000
-- frontend: Next.js dashboard on http://localhost:3000
+### 4. Check Job Status
+```bash
+curl http://localhost:8000/api/jobs/{job_id}
+```
 
-## Project layout
+### 5. List Jobs & Models
+```bash
+# List all jobs
+curl http://localhost:8000/api/jobs
+
+# List all models
+curl http://localhost:8000/api/models
+```
+
+## 📁 Project Structure
 
 ```
 apps/
-  backend/            # FastAPI app (Python, uv, Uvicorn)
-  frontend/           # Next.js app (Node)
+  backend/
+    api/
+      routes.py         # FastAPI route handlers
+    db/
+      models.py         # SQLAlchemy database models
+      ai_crud.py        # Database operations
+      session.py        # DB connection & config
+    runners/
+      base.py           # Abstract runner interface
+      ollama.py         # Ollama backend implementation
+    alembic/            # Database migrations
+    schemas.py          # Pydantic request/response models
+    main.py             # FastAPI application entry point
+  frontend/             # Next.js frontend (coming soon)
 docker/
-  docker-compose.yml  # One-command local stack
-scripts/
-  db-init.sh          # Optional DB migration/init helper
+  docker-compose.yml    # Full stack orchestration
 ```
 
-## Environment variables
+## 🗄️ Database Schema
 
-Create minimal env files for local development (optional — defaults are baked into Compose):
+The system uses PostgreSQL with two main tables:
 
-- `apps/backend/.env`
-  - DATABASE_URL=postgresql+psycopg://rune:rune@db:5432/rune
-  - REDIS_URL=redis://redis:6379/0
+- **`models`**: Registry of available AI models
+  - `name`, `backend`, `config`, `description`
+  - Support for multiple backends (Ollama, MLX, etc.)
 
-- `apps/frontend/.env.local`
-  - NEXT_PUBLIC_API_URL=http://localhost:8000
+- **`jobs`**: Inference job tracking
+  - `prompt`, `parameters`, `result`, `status`
+  - Execution times, error messages, timestamps
 
-These are not strictly required if you use the provided docker-compose, but are handy when running services outside Docker.
+## 🔌 Backend Architecture
 
-## Database init / migrations
+### Model Runners
+Abstract `ModelRunner` interface supports multiple backends:
+- **OllamaRunner**: Direct API integration with Ollama
+- **MLXRunner**: Coming soon for Apple Silicon
+- **CustomRunner**: Extensible for any model backend
 
-If you use Alembic, run the helper script to apply migrations:
+### Job Lifecycle
+1. **Create**: Job submitted via API
+2. **Queue**: Added to processing queue (currently sync)
+3. **Execute**: Runner processes the job
+4. **Complete**: Results stored with execution metadata
 
-```zsh
-./scripts/db-init.sh
+## 🛠️ Development
+
+### Database Migrations
+```bash
+cd apps/backend
+
+# Create new migration
+uv run alembic revision --autogenerate -m "Description"
+
+# Apply migrations
+uv run alembic upgrade head
 ```
 
-The script will:
-- Ensure `uv` is available and dependencies are synced
-- Run `alembic upgrade head` if Alembic is configured
-- Otherwise, skip gracefully with a helpful message
+### Adding New Model Backends
 
-## Development tips
+1. Implement `ModelRunner` interface in `runners/`
+2. Add backend enum to `db/models.py`
+3. Register in `api/routes.py` RUNNERS dict
+4. Create migration for new enum values
 
-- First run can take a few minutes as images and dependencies are built.
-- Rebuild after code or Dockerfile changes:
-  ```zsh
-  docker compose -f docker/docker-compose.yml up --build
-  ```
-- Tail logs for a single service (example: backend):
-  ```zsh
-  docker compose -f docker/docker-compose.yml logs -f backend
-  ```
+### Environment Variables
 
-- Run apps outside Docker (hot reload):
-  - Backend:
-    ```zsh
-    cd apps/backend
-    uv sync
-    uv run uvicorn rune.api.main:app --reload
-    ```
-  - Frontend:
-    ```zsh
-    cd apps/frontend
-    npm install
-    npm run dev
-    ```
+Create `apps/backend/.env`:
+```env
+DATABASE_URL=postgresql+psycopg://rune:rune@localhost:5432/rune
+REDIS_URL=redis://localhost:6379/0
+SQLALCHEMY_ECHO=0
+```
 
-## Optional enhancements
+## 📊 Supported Backends
 
-- Add a Makefile for shorter commands (e.g., `make dev`, `make down`, `make clean`).
-- Add healthchecks to services for faster, more reliable startup sequencing.
- - Add Alembic + models to enable real migrations if not present yet.
+### Ollama
+- **Status**: ✅ Fully implemented
+- **Models**: Any model available in your local Ollama installation
+- **Check models**: `curl http://localhost:11434/api/tags`
 
-## License
+### MLX (Apple Silicon)
+- **Status**: 🚧 Coming soon
+- **Target**: Optimized inference for M-series chips
+- **Use case**: Efficient local inference on MacBooks
 
-TBD
+### Custom Backends
+- **Status**: 🔧 Extensible architecture
+- **Examples**: vLLM, TensorRT, ONNX Runtime, Hugging Face Transformers
+
+## 🎯 Roadmap
+
+### Phase 1 (✅ Complete)
+- [x] Core API infrastructure
+- [x] PostgreSQL integration with Alembic
+- [x] Ollama backend runner
+- [x] Job queue and status tracking
+- [x] Model registry and management
+- [x] Interactive API documentation
+
+### Phase 2 (🚧 Next)
+- [ ] Async job processing with Redis/RQ
+- [ ] MLX backend for Apple Silicon
+- [ ] Next.js frontend dashboard
+- [ ] WebSocket job status updates
+- [ ] Batch job processing
+
+### Phase 3 (🔮 Future)
+- [ ] Workflow automation and chaining
+- [ ] Multi-user authentication
+- [ ] Model performance analytics
+- [ ] Cluster mode (multiple machines)
+- [ ] Plugin system for community runners
+
+## 🐛 Troubleshooting
+
+### Backend won't start
+```bash
+# Check database connection
+curl http://localhost:8000/api/health
+
+# Check logs
+cd apps/backend && uv run python main.py
+```
+
+### Ollama models not working
+```bash
+# Verify Ollama is running
+curl http://localhost:11434/api/tags
+
+# Pull a model if needed
+ollama pull llama3.2:3b
+```
+
+### Database migration issues
+```bash
+cd apps/backend
+
+# Reset database (⚠️ destroys data)
+uv run alembic downgrade base
+uv run alembic upgrade head
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes and add tests
+4. Run linting: `cd apps/backend && uv run ruff format . && uv run ruff check .`
+5. Commit changes: `git commit -m 'Add amazing feature'`
+6. Push to branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+## 📝 License
+
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- [FastAPI](https://fastapi.tiangolo.com/) for the excellent API framework
+- [Ollama](https://ollama.com/) for local LLM inference
+- [SQLAlchemy](https://sqlalchemy.org/) for database management
+- Inspired by [Replicate](https://replicate.com/) and [RunPod](https://runpod.io/)

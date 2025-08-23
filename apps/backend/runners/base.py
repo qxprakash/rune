@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 
 class RunResult:
@@ -19,7 +19,7 @@ class RunResult:
         self.error = error
         self.execution_time_ms = execution_time_ms
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "success": self.success,
@@ -33,7 +33,7 @@ class ModelRunner(ABC):
     """Abstract base class for model runners."""
 
     @abstractmethod
-    async def run(self, prompt: str, parameters: Dict[str, Any] | None = None) -> RunResult:
+    async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
         """Run inference on a model.
         
         Args:

@@ -1,0 +1,17 @@
+{
+	"python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/.venv/bin/python",
+	"python.analysis.diagnosticMode": "workspace",
+
+	// Python-specific formatting with Ruff
+	"[python]": {
+		"editor.defaultFormatter": "charliermarsh.ruff",
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.fixAll": "explicit",
+			"source.organizeImports": "explicit"
+		}
+	},
+
+		// Ruff VS Code extension behavior
+		"ruff.organizeImports": true
+}

@@ -22,3 +22,29 @@ dev = [
     "pytest>=8.4.1",
     "ruff>=0.12.10",
 ]
+
+[tool.ruff]
+# Apply Ruff to this backend app.
+target-version = "py312"
+line-length = 100
+src = ["."]
+
+[tool.ruff.format]
+# Enable Ruff's built-in formatter.
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.ruff.lint]
+# Keep linting sane and fast; expand as the codebase grows.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modernize code)
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

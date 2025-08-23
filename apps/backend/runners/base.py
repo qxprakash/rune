@@ -49,3 +49,9 @@ class ModelRunner(ABC):
     def is_available(self) -> bool:
         """Check if this runner is available on the system."""
         pass
+
+    @classmethod
+    @abstractmethod
+    def list_available_models(cls) -> list[str]:
+        """List available models for this runner type."""
+        pass

@@ -113,8 +113,8 @@ class MLXRunner(ModelRunner):
             logger.debug(f"MLX not available: {e}")
             return False
 
-    @staticmethod
-    def list_available_models() -> list[str]:
+    @classmethod
+    def list_available_models(cls) -> list[str]:
         """List available MLX models."""
         try:
             # Try to get available models from mlx_lm

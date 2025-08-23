@@ -133,7 +133,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["ollama"] = await _get_ollama_models()
+                discovered["ollama"] = runner_class.list_available_models()
             else:
                 discovered["ollama"] = []
         except Exception as e:
@@ -456,23 +456,6 @@ async def check_dependencies() -> dict:
 # Helper Functions
 
 
-async def _get_ollama_models() -> list[str]:
-    """Get list of available Ollama models."""
-    try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get("http://localhost:11434/api/tags")
-            if response.status_code == 200:
-                data = response.json()
-                models = [model["name"] for model in data.get("models", [])]
-                return models
-            return []
-    except Exception as e:
-        logger.error(f"Failed to get Ollama models: {e}")
-        return []
-
-
 async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
     """Execute a job using the appropriate runner."""
     job = ai_crud.get_job(db, job_id=job_id)
@@ -500,8 +483,12 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
         elif job.backend == ModelBackend.mlx:
             # For MLX, we might need model path from config
             model = ai_crud.get_model_by_name(db, name=job.model_name)
-            model_path = model.config.get("model_path") if model and model.config else None
-            runner = runner_class(job.model_name, model_path)
+            if model and model.config and "model_path" in model.config:
+                path_value = model.config["model_path"]
+                model_path = str(path_value) if path_value is not None else None
+                runner = runner_class(job.model_name, model_path)
+            else:
+                runner = runner_class(job.model_name)
         else:
             runner = runner_class(job.model_name)
 

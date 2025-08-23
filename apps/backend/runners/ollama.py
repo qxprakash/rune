@@ -103,6 +103,23 @@ class OllamaRunner(ModelRunner):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
+    @classmethod
+    def list_available_models(cls) -> list[str]:
+        """List available Ollama models."""
+        try:
+            import httpx
+
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get("http://localhost:11434/api/tags")
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [model["name"] for model in data.get("models", [])]
+                    return models
+                return []
+        except Exception as e:
+            logger.debug(f"Failed to get Ollama models: {e}")
+            return []
+
     def __del__(self):
         # Ensure the client is closed
         try:

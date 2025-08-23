@@ -84,8 +84,12 @@ async def _execute_job_sync(job_id: uuid.UUID, db) -> dict:
         elif job.backend == ModelBackend.mlx:
             # For MLX, we might need model path from config
             model = ai_crud.get_model_by_name(db, name=job.model_name)
-            model_path = model.config.get("model_path") if model and model.config else None
-            runner = runner_class(job.model_name, model_path)
+            if model and model.config and "model_path" in model.config:
+                path_value = model.config["model_path"]
+                model_path = str(path_value) if path_value is not None else None
+                runner = runner_class(job.model_name, model_path)
+            else:
+                runner = runner_class(job.model_name)
         else:
             runner = runner_class(job.model_name)
 

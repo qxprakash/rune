@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from .models import Job, JobStatus, Model, ModelBackend
 
-
 # Models CRUD
 
 

@@ -21,7 +21,7 @@ class OllamaRunner(ModelRunner):
     async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
         """Run inference using Ollama API."""
         start_time = time.time()
-        
+
         try:
             # Default parameters for Ollama
             params = {
@@ -30,22 +30,22 @@ class OllamaRunner(ModelRunner):
                 "top_k": 40,
                 **(parameters or {}),
             }
-            
+
             payload = {
                 "model": self.model_name,
                 "prompt": prompt,
                 "stream": False,
                 "options": params,
             }
-            
+
             logger.info(f"Running Ollama model {self.model_name} with prompt: {prompt[:100]}...")
-            
+
             response = await self.client.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
-            
+
             if response.status_code != 200:
                 error_msg = f"Ollama API error: {response.status_code} - {response.text}"
                 logger.error(error_msg)
@@ -54,19 +54,19 @@ class OllamaRunner(ModelRunner):
                     error=error_msg,
                     execution_time_ms=int((time.time() - start_time) * 1000),
                 )
-            
+
             result = response.json()
             output_text = result.get("response", "")
-            
+
             execution_time = int((time.time() - start_time) * 1000)
             logger.info(f"Ollama inference completed in {execution_time}ms")
-            
+
             return RunResult(
                 success=True,
                 output=output_text,
                 execution_time_ms=execution_time,
             )
-            
+
         except httpx.RequestError as e:
             error_msg = f"Connection error to Ollama: {str(e)}"
             logger.error(error_msg)
@@ -89,6 +89,7 @@ class OllamaRunner(ModelRunner):
         try:
             # Try to reach Ollama API
             import httpx
+
             with httpx.Client(timeout=5.0) as client:
                 response = client.get(f"{self.base_url}/api/tags")
                 return response.status_code == 200
@@ -105,7 +106,7 @@ class OllamaRunner(ModelRunner):
     def __del__(self):
         # Ensure the client is closed
         try:
-            if hasattr(self, 'client'):
+            if hasattr(self, "client"):
                 asyncio.create_task(self.client.aclose())
         except Exception:
             pass

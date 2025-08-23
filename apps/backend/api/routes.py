@@ -37,6 +37,7 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
     try:
         # Test database connection
         from sqlalchemy import text
+
         db.execute(text("SELECT 1"))
         database_ok = True
     except Exception as e:
@@ -103,7 +104,7 @@ async def list_models(
     """List all models."""
     models = ai_crud.get_models(db, skip=skip, limit=limit, active_only=active_only)
     total = len(models)  # For now, simple count
-    
+
     return ModelsListResponse(
         models=[ModelResponse.model_validate(model) for model in models],
         total=total,
@@ -122,9 +123,11 @@ async def get_model(
     if not model:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Model with ID {model_id} not found",
-    )
+            detail=f"Model with ID {model_id} not found",
+        )
     return ModelResponse.model_validate(model)
+
+
 @router.put("/models/{model_id}", response_model=ModelResponse)
 async def update_model(
     model_id: uuid.UUID,
@@ -140,13 +143,13 @@ async def update_model(
         description=model_data.description,
         is_active=model_data.is_active,
     )
-    
+
     if not model:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model with ID {model_id} not found",
         )
-    
+
     logger.info(f"Updated model: {model.name}")
     return ModelResponse.model_validate(model)
 
@@ -163,7 +166,7 @@ async def delete_model(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model with ID {model_id} not found",
         )
-    
+
     return {"message": "Model deleted successfully"}
 
 
@@ -184,7 +187,7 @@ async def create_job(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model '{model_name}' not found",
         )
-    
+
     if not model.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -201,7 +204,7 @@ async def create_job(
     )
 
     logger.info(f"Created job {job.id} for model {model_name}")
-    
+
     # For MVP, we'll run synchronously (later we'll add queue processing)
     await _execute_job(job.id, db)
 
@@ -228,7 +231,7 @@ async def list_jobs(
         status=status_filter,
     )
     total = len(jobs)  # Simple count for now
-    
+
     return JobsListResponse(
         jobs=[JobResponse.model_validate(job) for job in jobs],
         total=total,
@@ -247,9 +250,11 @@ async def get_job(
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Job with ID {job_id} not found",
-    )
+            detail=f"Job with ID {job_id} not found",
+        )
     return JobResponse.model_validate(job)
+
+
 # Helper Functions
 
 
@@ -315,7 +320,7 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
             completed_at=datetime.utcnow(),
         )
         logger.error(f"Job {job_id} failed: {error_msg}")
-    
+
     finally:
         # Clean up runner resources if needed
         if hasattr(runner, "__aexit__"):

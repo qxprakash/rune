@@ -15,18 +15,19 @@ from db.session import engine
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     logger.info("Starting AI Playground Backend")
-    
+
     # Test database connection
     try:
         from sqlalchemy import text
+
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         logger.info("Database connection successful")
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-    
+
     yield
-    
+
     logger.info("Shutting down AI Playground Backend")
 
 
@@ -58,7 +59,7 @@ async def root() -> dict[str, Any]:
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

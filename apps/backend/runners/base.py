@@ -35,11 +35,11 @@ class ModelRunner(ABC):
     @abstractmethod
     async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
         """Run inference on a model.
-        
+
         Args:
             prompt: Input prompt/text for the model
             parameters: Optional parameters for the model (temperature, max_tokens, etc.)
-            
+
         Returns:
             RunResult with the model output
         """

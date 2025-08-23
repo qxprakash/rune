@@ -89,3 +89,16 @@ class HealthResponse(BaseModel):
     version: str = "0.1.0"
     database: bool
     runners: dict[str, bool]
+
+
+# Batch job schemas
+class BatchJobCreate(BaseModel):
+    jobs: list[JobCreate] = Field(..., description="List of jobs to create")
+    run_sequential: bool = Field(default=False, description="Whether to run jobs sequentially")
+
+
+class BatchJobResponse(BaseModel):
+    batch_id: str = Field(..., description="Batch identifier")
+    job_ids: list[uuid.UUID] = Field(..., description="List of created job IDs")
+    total_jobs: int = Field(..., description="Total number of jobs in batch")
+    message: str = Field(..., description="Status message")

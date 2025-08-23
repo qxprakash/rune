@@ -4,72 +4,76 @@ import uuid
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Enum as SAEnum, Integer, JSON, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .session import Base
 
 
-class RoleEnum(str, Enum):
-    user = "user"
-    assistant = "assistant"
+class JobStatus(str, Enum):
+    """Status of a job execution."""
+
+    queued = "queued"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
 
 
-class User(Base):
-    __tablename__ = "users"
+class ModelBackend(str, Enum):
+    """Available model backends."""
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    # Relationships
-    conversations: Mapped[list[Conversation]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
+    ollama = "ollama"
+    mlx = "mlx"
+    pytorch = "pytorch"
+    gguf = "gguf"
 
 
-class Conversation(Base):
-    __tablename__ = "conversations"
+class Model(Base):
+    """Registered AI models."""
+
+    __tablename__ = "models"
 
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    backend: Mapped[ModelBackend] = mapped_column(
+        SAEnum(ModelBackend, name="model_backend_enum"), nullable=False
     )
-    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-
-    # Relationships
-    user: Mapped[User | None] = relationship(back_populates="conversations")
-    messages: Mapped[list[Message]] = relationship(
-        back_populates="conversation",
-        cascade="all, delete-orphan",
-        order_by="Message.created_at",
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 
-class Message(Base):
-    __tablename__ = "messages"
+class Job(Base):
+    """Job execution records."""
+
+    __tablename__ = "jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    conversation_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    backend: Mapped[ModelBackend] = mapped_column(
+        SAEnum(ModelBackend, name="model_backend_enum"), nullable=False
     )
-    role: Mapped[RoleEnum] = mapped_column(SAEnum(RoleEnum, name="role_enum"), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[JobStatus] = mapped_column(
+        SAEnum(JobStatus, name="job_status_enum"), nullable=False, default=JobStatus.queued
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    execution_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-
-    # Relationships
-    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

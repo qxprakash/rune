@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Read from env; default matches docker-compose service names
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://rune:rune@db:5432/rune")

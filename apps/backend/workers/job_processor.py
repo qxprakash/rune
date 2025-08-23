@@ -86,8 +86,10 @@ async def _execute_job_sync(job_id: uuid.UUID, db) -> dict:
             model = ai_crud.get_model_by_name(db, name=job.model_name)
             if model and model.config and "model_path" in model.config:
                 path_value = model.config["model_path"]
-                model_path = str(path_value) if path_value is not None else None
-                runner = runner_class(job.model_name, model_path)
+                if path_value is not None:
+                    runner = runner_class(job.model_name, str(path_value))
+                else:
+                    runner = runner_class(job.model_name)
             else:
                 runner = runner_class(job.model_name)
         else:

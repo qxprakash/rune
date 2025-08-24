@@ -12,6 +12,7 @@ from db.models import JobStatus, ModelBackend
 from db.session import get_session
 from runners.mlx import MLXRunner
 from runners.ollama import OllamaRunner
+from runners.pytorch import PyTorchRunner
 from schemas import (
     BatchJobCreate,
     BatchJobResponse,
@@ -33,6 +34,7 @@ router = APIRouter()
 RUNNERS = {
     ModelBackend.ollama: OllamaRunner,
     ModelBackend.mlx: MLXRunner,
+    ModelBackend.pytorch: PyTorchRunner,
 }
 
 
@@ -58,6 +60,9 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
                 runner = runner_class("test")
                 runners_status[backend.value] = runner.is_available()
             elif backend == ModelBackend.mlx:
+                runner = runner_class("test")
+                runners_status[backend.value] = runner.is_available()
+            elif backend == ModelBackend.pytorch:
                 runner = runner_class("test")
                 runners_status[backend.value] = runner.is_available()
             else:
@@ -132,7 +137,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["ollama"] = runner_class.list_available_models()
+                discovered["ollama"] = runner_class.list_available_models()  # type: ignore
             else:
                 discovered["ollama"] = []
         except Exception as e:
@@ -145,12 +150,25 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["mlx"] = runner_class.list_available_models()
+                discovered["mlx"] = runner_class.list_available_models()  # type: ignore
             else:
                 discovered["mlx"] = []
         except Exception as e:
             logger.error(f"Failed to discover MLX models: {e}")
             discovered["mlx"] = []
+
+    # Discover PyTorch models
+    if ModelBackend.pytorch in RUNNERS:
+        runner_class = RUNNERS[ModelBackend.pytorch]
+        try:
+            runner = runner_class("test")
+            if runner.is_available():
+                discovered["pytorch"] = runner_class.list_available_models()  # type: ignore
+            else:
+                discovered["pytorch"] = []
+        except Exception as e:
+            logger.error(f"Failed to discover PyTorch models: {e}")
+            discovered["pytorch"] = []
 
     return discovered
 
@@ -184,6 +202,15 @@ async def register_discovered_models(
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "top_k": 40,
+            }
+        elif backend == ModelBackend.pytorch:
+            config = {
+                "temperature": 0.7,
+                "max_new_tokens": 512,
+                "top_p": 0.9,
+                "top_k": 50,
+                "do_sample": True,
+                "repetition_penalty": 1.1,
             }
 
         try:
@@ -543,6 +570,22 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
                     runner = runner_class(job.model_name, str(path_value))
                 else:
                     runner = runner_class(job.model_name)
+            else:
+                runner = runner_class(job.model_name)
+        elif job.backend == ModelBackend.pytorch:
+            # For PyTorch, support custom model_path and device configuration
+            model = ai_crud.get_model_by_name(db, name=job.model_name)
+            if model and model.config:
+                model_path = model.config.get("model_path")
+                device = model.config.get("device")
+                max_memory_gb = model.config.get("max_memory_gb", 3.0)
+
+                runner = runner_class(
+                    job.model_name,
+                    model_path=model_path,
+                    device=device,
+                    max_memory_gb=max_memory_gb,
+                )
             else:
                 runner = runner_class(job.model_name)
         else:

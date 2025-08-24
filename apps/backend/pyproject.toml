@@ -25,6 +25,15 @@ dev = [
     "ruff>=0.12.10",
 ]
 
+# Optional backend dependencies
+pytorch = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "accelerate>=0.20.0",
+    "tokenizers>=0.13.0",
+    "safetensors>=0.3.0",
+]
+
 [tool.ruff]
 # Apply Ruff to this backend app.
 target-version = "py312"

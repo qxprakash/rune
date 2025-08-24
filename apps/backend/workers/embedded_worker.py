@@ -24,11 +24,13 @@ from db.models import JobStatus, ModelBackend
 from db.session import get_session
 from runners.mlx import MLXRunner
 from runners.ollama import OllamaRunner
+from runners.pytorch import PyTorchRunner
 
 # Runner mapping
 RUNNERS = {
     ModelBackend.ollama: OllamaRunner,
     ModelBackend.mlx: MLXRunner,
+    ModelBackend.pytorch: PyTorchRunner,
 }
 
 
@@ -158,6 +160,22 @@ class EmbeddedWorkerManager:
                         runner = runner_class(job.model_name, str(path_value))
                     else:
                         runner = runner_class(job.model_name)
+                else:
+                    runner = runner_class(job.model_name)
+            elif job.backend == ModelBackend.pytorch:
+                # For PyTorch, support custom model_path and device configuration
+                model = ai_crud.get_model_by_name(db, name=job.model_name)
+                if model and model.config:
+                    model_path = model.config.get("model_path")
+                    device = model.config.get("device")
+                    max_memory_gb = model.config.get("max_memory_gb", 3.0)
+
+                    runner = runner_class(
+                        job.model_name,
+                        model_path=model_path,
+                        device=device,
+                        max_memory_gb=max_memory_gb,
+                    )
                 else:
                     runner = runner_class(job.model_name)
             else:

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from .models import Job, JobStatus, Model, ModelBackend
+from .models import Job, JobStatus, JobType, Model, ModelBackend
 
 # Models CRUD
 
@@ -18,6 +18,7 @@ def create_model(
     backend: ModelBackend,
     config: dict[str, Any],
     description: str | None = None,
+    supported_tasks: list[str] | None = None,
 ) -> Model:
     """Create a new model record."""
     model = Model(
@@ -25,6 +26,7 @@ def create_model(
         backend=backend,
         config=config,
         description=description,
+        supported_tasks=supported_tasks or ["text_generation"],
     )
     db.add(model)
     db.commit()
@@ -103,13 +105,17 @@ def create_job(
     model_name: str,
     backend: ModelBackend,
     prompt: str,
+    task_type: JobType = JobType.text_generation,
+    input_files: list[str] | None = None,
     parameters: dict[str, Any] | None = None,
 ) -> Job:
     """Create a new job record."""
     job = Job(
         model_name=model_name,
         backend=backend,
+        task_type=task_type,
         prompt=prompt,
+        input_files=input_files or [],
         parameters=parameters or {},
         status=JobStatus.queued,
     )
@@ -151,6 +157,7 @@ def update_job_status(
     job_id: uuid.UUID,
     status: JobStatus,
     result: dict[str, Any] | None = None,
+    output_files: list[str] | None = None,
     error_message: str | None = None,
     execution_time_ms: int | None = None,
     started_at: Any = None,
@@ -164,6 +171,8 @@ def update_job_status(
     job.status = status
     if result is not None:
         job.result = result
+    if output_files is not None:
+        job.output_files = output_files
     if error_message is not None:
         job.error_message = error_message
     if execution_time_ms is not None:

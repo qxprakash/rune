@@ -25,12 +25,14 @@ from db.session import get_session
 from runners.mlx import MLXRunner
 from runners.ollama import OllamaRunner
 from runners.pytorch import PyTorchRunner
+from runners.whisper import WhisperRunner
 
 # Runner mapping
 RUNNERS = {
     ModelBackend.ollama: OllamaRunner,
     ModelBackend.mlx: MLXRunner,
     ModelBackend.pytorch: PyTorchRunner,
+    ModelBackend.whisper: WhisperRunner,
 }
 
 
@@ -178,11 +180,24 @@ class EmbeddedWorkerManager:
                     )
                 else:
                     runner = runner_class(job.model_name)
+            elif job.backend == ModelBackend.whisper:
+                # For Whisper, get model name from config or use job model name
+                model = ai_crud.get_model_by_name(db, name=job.model_name)
+                if model and model.config and "model_name" in model.config:
+                    whisper_model = model.config["model_name"]
+                    runner = runner_class(whisper_model)
+                else:
+                    runner = runner_class(job.model_name)
             else:
                 runner = runner_class(job.model_name)
 
             # Execute the job
-            result = await runner.run(job.prompt, job.parameters)
+            result = await runner.run(
+                prompt=job.prompt,
+                task_type=job.task_type,
+                input_files=job.input_files,
+                parameters=job.parameters,
+            )
 
             # Update job with result
             if result.success:
@@ -191,6 +206,7 @@ class EmbeddedWorkerManager:
                     job_id=job_id,
                     status=JobStatus.completed,
                     result=result.to_dict(),
+                    output_files=result.output_files,
                     execution_time_ms=result.execution_time_ms,
                     completed_at=datetime.utcnow(),
                 )

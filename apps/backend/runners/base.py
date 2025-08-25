@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from db.models import JobType
+
 
 class RunResult:
     """Result of a model run."""
@@ -11,11 +13,13 @@ class RunResult:
         self,
         success: bool,
         output: Any = None,
+        output_files: list[str] | None = None,
         error: str | None = None,
         execution_time_ms: int | None = None,
     ):
         self.success = success
         self.output = output
+        self.output_files = output_files or []
         self.error = error
         self.execution_time_ms = execution_time_ms
 
@@ -24,6 +28,7 @@ class RunResult:
         return {
             "success": self.success,
             "output": self.output,
+            "output_files": self.output_files,
             "error": self.error,
             "execution_time_ms": self.execution_time_ms,
         }
@@ -33,15 +38,23 @@ class ModelRunner(ABC):
     """Abstract base class for model runners."""
 
     @abstractmethod
-    async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
+    async def run(
+        self,
+        prompt: str,
+        task_type: JobType = JobType.text_generation,
+        input_files: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> RunResult:
         """Run inference on a model.
 
         Args:
             prompt: Input prompt/text for the model
+            task_type: Type of AI task to perform
+            input_files: Input files for multi-modal tasks (audio, images, etc.)
             parameters: Optional parameters for the model (temperature, max_tokens, etc.)
 
         Returns:
-            RunResult with the model output
+            RunResult with the model output and any generated files
         """
         pass
 
@@ -55,3 +68,49 @@ class ModelRunner(ABC):
     def list_available_models(cls) -> list[str]:
         """List available models for this runner type."""
         pass
+
+    @classmethod
+    def get_supported_tasks(cls) -> list[JobType]:
+        """Get the task types supported by this runner.
+
+        Returns:
+            List of supported JobType values. Override in subclasses.
+        """
+        return [JobType.text_generation]
+
+    # Convenience methods for specific task types
+    async def run_text_generation(
+        self, prompt: str, parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Generate text from prompt."""
+        return await self.run(prompt, JobType.text_generation, None, parameters)
+
+    async def run_speech_to_text(
+        self, input_files: list[str], prompt: str = "", parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Transcribe audio to text."""
+        return await self.run(prompt, JobType.speech_to_text, input_files, parameters)
+
+    async def run_text_to_speech(
+        self, prompt: str, parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Convert text to speech."""
+        return await self.run(prompt, JobType.text_to_speech, None, parameters)
+
+    async def run_image_generation(
+        self, prompt: str, parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Generate image from prompt."""
+        return await self.run(prompt, JobType.image_generation, None, parameters)
+
+    async def run_image_to_text(
+        self, input_files: list[str], prompt: str = "", parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Analyze/describe images."""
+        return await self.run(prompt, JobType.image_to_text, input_files, parameters)
+
+    async def run_embeddings(
+        self, prompt: str, parameters: dict[str, Any] | None = None
+    ) -> RunResult:
+        """Generate embeddings for text."""
+        return await self.run(prompt, JobType.embeddings, None, parameters)

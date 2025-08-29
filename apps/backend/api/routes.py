@@ -13,6 +13,7 @@ from db.session import get_session
 from runners.mlx import MLXRunner
 from runners.ollama import OllamaRunner
 from runners.pytorch import PyTorchRunner
+from runners.whisper import WhisperRunner
 from schemas import (
     BatchJobCreate,
     BatchJobResponse,
@@ -35,6 +36,7 @@ RUNNERS = {
     ModelBackend.ollama: OllamaRunner,
     ModelBackend.mlx: MLXRunner,
     ModelBackend.pytorch: PyTorchRunner,
+    ModelBackend.whisper: WhisperRunner,
 }
 
 
@@ -64,6 +66,9 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
                 runners_status[backend.value] = runner.is_available()
             elif backend == ModelBackend.pytorch:
                 runner = runner_class("test")
+                runners_status[backend.value] = runner.is_available()
+            elif backend == ModelBackend.whisper:
+                runner = runner_class("openai/whisper-tiny")
                 runners_status[backend.value] = runner.is_available()
             else:
                 runners_status[backend.value] = False
@@ -170,6 +175,19 @@ async def discover_models() -> dict[str, list[str]]:
             logger.error(f"Failed to discover PyTorch models: {e}")
             discovered["pytorch"] = []
 
+    # Discover Whisper models
+    if ModelBackend.whisper in RUNNERS:
+        runner_class = RUNNERS[ModelBackend.whisper]
+        try:
+            runner = runner_class("openai/whisper-tiny")
+            if runner.is_available():
+                discovered["whisper"] = runner_class.list_available_models()  # type: ignore
+            else:
+                discovered["whisper"] = []
+        except Exception as e:
+            logger.error(f"Failed to discover Whisper models: {e}")
+            discovered["whisper"] = []
+
     return discovered
 
 
@@ -211,6 +229,12 @@ async def register_discovered_models(
                 "top_k": 50,
                 "do_sample": True,
                 "repetition_penalty": 1.1,
+            }
+        elif backend == ModelBackend.whisper:
+            config = {
+                "language": None,  # Auto-detect
+                "task": "transcribe",
+                "return_timestamps": False,
             }
 
         try:
@@ -316,6 +340,8 @@ async def create_job(
         model_name=model_name,
         backend=model.backend,
         prompt=job_data.prompt,
+        task_type=job_data.task_type,
+        input_files=job_data.input_files,
         parameters=job_data.parameters,
     )
 
@@ -432,6 +458,8 @@ async def create_batch_jobs(
                 model_name=job_data.model_name,
                 backend=model.backend,
                 prompt=job_data.prompt,
+                task_type=job_data.task_type,
+                input_files=job_data.input_files,
                 parameters=job_data.parameters,
             )
 
@@ -588,11 +616,19 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
                 )
             else:
                 runner = runner_class(job.model_name)
+        elif job.backend == ModelBackend.whisper:
+            # For Whisper, use model name directly
+            runner = runner_class(job.model_name)
         else:
             runner = runner_class(job.model_name)
 
         # Execute the job
-        result = await runner.run(job.prompt, job.parameters)
+        result = await runner.run(
+            prompt=job.prompt,
+            task_type=job.task_type,
+            input_files=job.input_files,
+            parameters=job.parameters,
+        )
 
         # Update job with result
         if result.success:
@@ -601,6 +637,7 @@ async def _execute_job(job_id: uuid.UUID, db: Session) -> None:
                 job_id=job_id,
                 status=JobStatus.completed,
                 result=result.to_dict(),
+                output_files=result.output_files,
                 execution_time_ms=result.execution_time_ms,
                 completed_at=datetime.utcnow(),
             )

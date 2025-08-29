@@ -7,6 +7,8 @@ from typing import Any
 
 from loguru import logger
 
+from db.models import JobType
+
 from .base import ModelRunner, RunResult
 
 
@@ -18,9 +20,23 @@ class MLXRunner(ModelRunner):
         # Default to mlx-community format if no path specified
         self.model_path = model_path or f"mlx-community/{model_name}"
 
-    async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
+    async def run(
+        self,
+        prompt: str,
+        task_type: JobType = JobType.text_generation,
+        input_files: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> RunResult:
         """Run inference using MLX."""
         start_time = time.time()
+
+        # MLX currently only supports text generation
+        if task_type != JobType.text_generation:
+            return RunResult(
+                success=False,
+                error=f"MLX runner does not support task type: {task_type}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
 
         try:
             # Default parameters for MLX

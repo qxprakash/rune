@@ -18,6 +18,8 @@ from typing import Any
 
 from loguru import logger
 
+from db.models import JobType
+
 from .base import ModelRunner, RunResult
 
 
@@ -160,9 +162,23 @@ class PyTorchRunner(ModelRunner):
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
-    async def run(self, prompt: str, parameters: dict[str, Any] | None = None) -> RunResult:
+    async def run(
+        self,
+        prompt: str,
+        task_type: JobType = JobType.text_generation,
+        input_files: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> RunResult:
         """Run inference on the PyTorch model."""
         start_time = time.time()
+
+        # Currently only supports text generation and embeddings
+        if task_type not in [JobType.text_generation, JobType.embeddings]:
+            return RunResult(
+                success=False,
+                error=f"PyTorch runner does not yet support task type: {task_type}",
+                execution_time_ms=int((time.time() - start_time) * 1000),
+            )
 
         try:
             # Load model if needed
@@ -278,6 +294,11 @@ class PyTorchRunner(ModelRunner):
             "t5-small",
             "t5-base",
         ]
+
+    @classmethod
+    def get_supported_tasks(cls) -> list[JobType]:
+        """Get the task types supported by this runner."""
+        return [JobType.text_generation, JobType.embeddings]
 
     @classmethod
     def clear_cache(cls) -> None:

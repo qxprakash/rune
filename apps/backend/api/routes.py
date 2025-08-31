@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import uuid
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from loguru import logger
@@ -314,10 +312,47 @@ async def delete_model(
     return {"message": "Model deleted successfully"}
 
 
+@router.post("/models/validate")
+async def validate_model_name(
+    model_data: dict[str, str],
+    db: Session = Depends(get_session),
+) -> dict[str, str | bool]:
+    """Validate a model name and suggest corrections if invalid."""
+    from runners.pytorch import PyTorchRunner
+
+    model_name = model_data.get("name", "")
+    if not model_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Model name is required",
+        )
+
+    # Check if model is valid
+    pytorch_runner = PyTorchRunner("", {})
+    is_valid = pytorch_runner.validate_model_name(model_name)
+
+    response = {
+        "is_valid": is_valid,
+        "model_name": model_name,
+    }
+
+    if not is_valid:
+        suggestion = pytorch_runner.suggest_model_name(model_name)
+        if suggestion:
+            response["suggestion"] = suggestion
+            response["message"] = f"Model '{model_name}' is not valid. Did you mean '{suggestion}'?"
+        else:
+            response["message"] = f"Model '{model_name}' is not a valid model identifier."
+    else:
+        response["message"] = f"Model '{model_name}' is valid."
+
+    return response
+
+
 # Job Management Routes
 
 
-@router.post("/run/{model_name}", response_model=JobCreateResponse)
+@router.post("/run/{model_name:path}", response_model=JobCreateResponse)
 async def create_job(
     model_name: str,
     job_data: JobBase,  # Changed from JobCreate to JobBase
@@ -389,7 +424,7 @@ async def create_job(
         )
 
 
-@router.post("/run/{model_name}/audio", response_model=JobCreateResponse)
+@router.post("/run/{model_name:path}/audio", response_model=JobCreateResponse)
 async def create_audio_job(
     model_name: str,
     audio: UploadFile = File(..., description="Audio file to process"),
@@ -431,7 +466,7 @@ async def create_audio_job(
     # Save audio file temporarily
     os.makedirs("tmp", exist_ok=True)
     temp_file_path = f"tmp/{uuid.uuid4()}_{audio.filename}"
-    
+
     try:
         # Read and save the audio file
         audio_content = await audio.read()
@@ -478,7 +513,7 @@ async def create_audio_job(
             # Clean up temp file on error
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-            
+
             # If all processing fails, update job status to failed
             ai_crud.update_job_status(
                 db,

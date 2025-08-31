@@ -105,6 +105,14 @@ class PyTorchRunner(ModelRunner):
             return self.model, self.tokenizer
 
         try:
+            # Validate model name before attempting to load
+            if not self.validate_model_name(self.model_path):
+                suggestion = self.suggest_model_name(self.model_path)
+                error_msg = f"Model '{self.model_path}' is not a valid model identifier."
+                if suggestion:
+                    error_msg += f" Did you mean '{suggestion}'?"
+                raise ValueError(error_msg)
+
             import torch
             from transformers import (
                 AutoConfig,
@@ -117,15 +125,15 @@ class PyTorchRunner(ModelRunner):
 
             # First, get the model config to determine the model architecture
             config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
-            
+
             # Determine which AutoModel class to use based on the model architecture
             model_class = AutoModelForCausalLM  # Default
-            
+
             # Check if it's a sequence-to-sequence model
-            if hasattr(config, 'is_encoder_decoder') and config.is_encoder_decoder:
+            if hasattr(config, "is_encoder_decoder") and config.is_encoder_decoder:
                 model_class = AutoModelForSeq2SeqLM
                 logger.info("Detected encoder-decoder model, using AutoModelForSeq2SeqLM")
-            elif config.model_type in ['t5', 'bart', 'pegasus', 'mbart', 'marian', 'blenderbot']:
+            elif config.model_type in ["t5", "bart", "pegasus", "mbart", "marian", "blenderbot"]:
                 model_class = AutoModelForSeq2SeqLM
                 logger.info(f"Detected {config.model_type} model, using AutoModelForSeq2SeqLM")
             else:
@@ -180,6 +188,16 @@ class PyTorchRunner(ModelRunner):
 
         except Exception as e:
             error_msg = f"Failed to load PyTorch model {self.model_name}: {str(e)}"
+
+            # Check if it's a model not found error and suggest corrections
+            if "is not a local folder and is not a valid model identifier" in str(e):
+                suggested_name = self.suggest_model_name(self.model_name)
+                if suggested_name:
+                    error_msg += f"\nDid you mean '{suggested_name}'?"
+                else:
+                    available_models = ", ".join(self.list_available_models()[:5])
+                    error_msg += f"\nAvailable models: {available_models}..."
+
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
@@ -214,32 +232,61 @@ class PyTorchRunner(ModelRunner):
                 "do_sample": True,
                 "repetition_penalty": 1.1,
             }
-            
+
             # Add pad_token_id if available
             if tokenizer.eos_token_id is not None:
                 default_params["pad_token_id"] = tokenizer.eos_token_id
-            
+
             # Merge with user parameters
             params = {**default_params, **(parameters or {})}
 
             # Filter out invalid generation parameters
             valid_generate_params = {
-                'max_length', 'max_new_tokens', 'min_length', 'min_new_tokens',
-                'do_sample', 'early_stopping', 'num_beams', 'num_beam_groups',
-                'diversity_penalty', 'temperature', 'top_k', 'top_p', 'typical_p',
-                'epsilon_cutoff', 'eta_cutoff', 'repetition_penalty', 'no_repeat_ngram_size',
-                'encoder_no_repeat_ngram_size', 'bad_words_ids', 'force_words_ids',
-                'renormalize_logits', 'constraints', 'forced_bos_token_id',
-                'forced_eos_token_id', 'remove_invalid_values', 'exponential_decay_length_penalty',
-                'suppress_tokens', 'begin_suppress_tokens', 'forced_decoder_ids',
-                'sequence_bias', 'guidance_scale', 'low_memory', 'num_return_sequences',
-                'output_attentions', 'output_hidden_states', 'output_scores',
-                'pad_token_id', 'eos_token_id', 'use_cache', 'generation_config'
+                "max_length",
+                "max_new_tokens",
+                "min_length",
+                "min_new_tokens",
+                "do_sample",
+                "early_stopping",
+                "num_beams",
+                "num_beam_groups",
+                "diversity_penalty",
+                "temperature",
+                "top_k",
+                "top_p",
+                "typical_p",
+                "epsilon_cutoff",
+                "eta_cutoff",
+                "repetition_penalty",
+                "no_repeat_ngram_size",
+                "encoder_no_repeat_ngram_size",
+                "bad_words_ids",
+                "force_words_ids",
+                "renormalize_logits",
+                "constraints",
+                "forced_bos_token_id",
+                "forced_eos_token_id",
+                "remove_invalid_values",
+                "exponential_decay_length_penalty",
+                "suppress_tokens",
+                "begin_suppress_tokens",
+                "forced_decoder_ids",
+                "sequence_bias",
+                "guidance_scale",
+                "low_memory",
+                "num_return_sequences",
+                "output_attentions",
+                "output_hidden_states",
+                "output_scores",
+                "pad_token_id",
+                "eos_token_id",
+                "use_cache",
+                "generation_config",
             }
-            
+
             # Filter parameters to only include valid generation parameters
             filtered_params = {k: v for k, v in params.items() if k in valid_generate_params}
-            
+
             # Log filtered out parameters for debugging
             filtered_out = {k: v for k, v in params.items() if k not in valid_generate_params}
             if filtered_out:
@@ -251,8 +298,7 @@ class PyTorchRunner(ModelRunner):
 
             # Check if this is a seq2seq model
             is_seq2seq = (
-                hasattr(model.config, 'is_encoder_decoder') 
-                and model.config.is_encoder_decoder
+                hasattr(model.config, "is_encoder_decoder") and model.config.is_encoder_decoder
             )
 
             # Tokenize input
@@ -275,13 +321,12 @@ class PyTorchRunner(ModelRunner):
                     # For seq2seq models, generate from encoder outputs
                     outputs = model.generate(
                         input_ids=inputs,
-                        **{k: v for k, v in filtered_params.items() if k != "pad_token_id"}
+                        **{k: v for k, v in filtered_params.items() if k != "pad_token_id"},
                     )
                 else:
                     # For causal LM models, generate continuing from input
                     outputs = model.generate(
-                        inputs, 
-                        **{k: v for k, v in filtered_params.items() if k != "pad_token_id"}
+                        inputs, **{k: v for k, v in filtered_params.items() if k != "pad_token_id"}
                     )
 
             # Decode output
@@ -343,6 +388,47 @@ class PyTorchRunner(ModelRunner):
         except ImportError as e:
             logger.debug(f"PyTorch/Transformers not available: {e}")
             return False
+
+    @classmethod
+    def validate_model_name(cls, model_name: str) -> bool:
+        """Validate if a model name exists on HuggingFace Hub."""
+        try:
+            from transformers import AutoConfig
+
+            # Try to load the config to check if model exists
+            AutoConfig.from_pretrained(model_name, _from_pipeline=True)
+            return True
+        except Exception as e:
+            logger.warning(f"Model validation failed for '{model_name}': {str(e)}")
+            return False
+
+    @classmethod
+    def suggest_model_name(cls, invalid_name: str) -> str | None:
+        """Suggest a correct model name based on invalid input."""
+        # Common corrections for misnamed models
+        corrections = {
+            "distilgpt2-fixed": "distilgpt2",
+            "gpt2-small": "gpt2",
+            "gpt2-medium": "gpt2-medium",
+            "gpt2-large": "gpt2-large",
+            "t5-tiny": "t5-small",
+            "flan-t5-tiny": "google/flan-t5-small",
+            "whisper-tiny": "openai/whisper-tiny",
+            "whisper-base": "openai/whisper-base",
+            "whisper-small": "openai/whisper-small",
+        }
+
+        # Direct correction if available
+        if invalid_name in corrections:
+            return corrections[invalid_name]
+
+        # Try to find similar names in available models
+        available_models = cls.list_available_models()
+        for model in available_models:
+            if invalid_name.lower() in model.lower() or model.lower() in invalid_name.lower():
+                return model
+
+        return None
 
     @classmethod
     def list_available_models(cls) -> list[str]:

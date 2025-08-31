@@ -11,6 +11,7 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [jobStatus, setJobStatus] = useState<'idle' | 'queued' | 'running' | 'completed' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
@@ -41,17 +42,18 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
     if (isWhisperModel && !recordedAudio && !audioFile) return;
 
     setLoading(true);
+    setJobStatus('queued');
     setError(null);
     setResult(null);
 
     try {
-      let requestBody;
+      let requestBody: FormData | string;
       const headers: Record<string, string> = {};
 
       if (isWhisperModel && (recordedAudio || audioFile)) {
         // For Whisper models, we need to upload the audio file
         const formData = new FormData();
-        const audioFileToUpload = audioFile || new File([recordedAudio!], 'recording.webm', { type: 'audio/webm' });
+        const audioFileToUpload = audioFile || new File([recordedAudio as Blob], 'recording.webm', { type: 'audio/webm' });
         formData.append('audio', audioFileToUpload);
         formData.append('task_type', 'speech_to_text');
         formData.append('parameters', JSON.stringify(model.config));
@@ -101,6 +103,9 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
       console.error('Test error:', error);
     } finally {
       setLoading(false);
+      if (jobStatus !== 'completed' && jobStatus !== 'failed') {
+        setJobStatus('idle');
+      }
     }
   };
 
@@ -127,6 +132,11 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
       try {
         const response = await fetch(`http://localhost:8000/api/jobs/${jobId}`);
         const job = await response.json();
+
+        // Update job status
+        if (job.status !== jobStatus) {
+          setJobStatus(job.status);
+        }
 
         if (job.status === 'completed') {
           if (job.result?.output) {
@@ -164,6 +174,77 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
   const getCurrentPrompts = () => {
     const taskType = model.supported_tasks[0] || 'text_generation';
     return testPrompts[taskType as keyof typeof testPrompts] || testPrompts.text_generation;
+  };
+
+  // Job Status Skeleton Component
+  const JobStatusSkeleton = () => {
+    const getStatusInfo = () => {
+      switch (jobStatus) {
+        case 'queued':
+          return {
+            color: 'text-yellow-400',
+            bgColor: 'bg-yellow-500/10 border-yellow-500/30',
+            icon: '⏳',
+            title: 'Job Queued',
+            description: 'Your job is waiting in the queue...'
+          };
+        case 'running':
+          return {
+            color: 'text-blue-400',
+            bgColor: 'bg-blue-500/10 border-blue-500/30',
+            icon: '⚡',
+            title: 'Processing',
+            description: isWhisperModel ? 'Transcribing audio...' : 'Generating response...'
+          };
+        default:
+          return {
+            color: 'text-gray-400',
+            bgColor: 'bg-gray-500/10 border-gray-500/30',
+            icon: '🔄',
+            title: 'Processing',
+            description: 'Processing your request...'
+          };
+      }
+    };
+
+    const statusInfo = getStatusInfo();
+
+    return (
+      <div className={`${statusInfo.bgColor} border rounded-lg p-6`}>
+        <div className="flex items-center space-x-3 mb-4">
+          <span className="text-2xl">{statusInfo.icon}</span>
+          <div>
+            <div className={`${statusInfo.color} font-medium`}>{statusInfo.title}</div>
+            <div className="text-gray-500 text-sm">{statusInfo.description}</div>
+          </div>
+        </div>
+        
+        {/* Animated skeleton bars */}
+        <div className="space-y-3">
+          <div className="flex space-x-2">
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-3/4"></div>
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-1/4"></div>
+          </div>
+          <div className="flex space-x-2">
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-1/2"></div>
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-1/2"></div>
+          </div>
+          <div className="flex space-x-2">
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-5/6"></div>
+            <div className="h-3 bg-gray-700 rounded-full animate-pulse w-1/6"></div>
+          </div>
+        </div>
+
+        {/* Pulsing progress indicator */}
+        <div className="mt-4 flex justify-center">
+          <div className="flex space-x-1">
+            <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: '0ms'}}></div>
+            <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: '150ms'}}></div>
+            <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{animationDelay: '300ms'}}></div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -326,9 +407,14 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
           </div>
 
           {/* Results */}
-          {(result || error) && (
+          {(result || error || loading || jobStatus === 'queued' || jobStatus === 'running') && (
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-gray-300">Test Result</h3>
+              
+              {/* Show skeleton while job is processing */}
+              {(jobStatus === 'queued' || jobStatus === 'running') && !result && !error && (
+                <JobStatusSkeleton />
+              )}
               
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
@@ -336,7 +422,7 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
                 </div>
               )}
 
-              {result && (
+              {result && !loading && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                   <div className="text-green-400 text-sm mb-2">
                     ✅ {isWhisperModel ? 'Transcription Complete' : 'Test Successful'}

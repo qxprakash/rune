@@ -28,11 +28,21 @@ const Jobs = () => {
   const getStatusBadge = (status: string) => {
     const styles = {
       completed: 'bg-green-500/20 text-green-400 border-green-500/30',
-      running: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      running: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30 animate-pulse',
       failed: 'bg-red-500/20 text-red-400 border-red-500/30',
-      queued: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      queued: 'bg-blue-500/20 text-blue-400 border-blue-500/30 animate-bounce',
     };
     return styles[status as keyof typeof styles] || styles.queued;
+  };
+
+  const getStatusIcon = (status: string) => {
+    const icons = {
+      completed: '✅',
+      running: '⚡',
+      failed: '❌',
+      queued: '⏳',
+    };
+    return icons[status as keyof typeof icons] || '🔄';
   };
 
   const formatDuration = (ms: number) => {
@@ -57,8 +67,43 @@ const Jobs = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-gray-400">Loading jobs...</div>
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-white">Jobs</h1>
+        </div>
+
+        {/* Stats Skeleton */}
+        <div className="grid grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-gray-800/30 border border-gray-700 rounded-lg p-4">
+              <div className="h-8 bg-gray-700 rounded animate-pulse mb-2"></div>
+              <div className="h-4 bg-gray-700 rounded animate-pulse w-20"></div>
+            </div>
+          ))}
+        </div>
+
+        {/* Table Skeleton */}
+        <div className="bg-gray-800/30 border border-gray-700 rounded-lg">
+          <div className="p-6 border-b border-gray-700">
+            <div className="h-6 bg-gray-700 rounded animate-pulse w-48"></div>
+          </div>
+          
+          <div className="divide-y divide-gray-700">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="px-6 py-4">
+                <div className="flex items-center space-x-6">
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-20"></div>
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-24"></div>
+                  <div className="h-6 bg-gray-700 rounded-full animate-pulse w-16"></div>
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-20"></div>
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-16"></div>
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-20"></div>
+                  <div className="h-4 bg-gray-700 rounded animate-pulse w-16"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -153,8 +198,9 @@ const Jobs = () => {
                     <div className="text-xs text-gray-500">{job.backend}</div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs rounded-full border ${getStatusBadge(job.status)}`}>
-                      {job.status}
+                    <span className={`px-2 py-1 text-xs rounded-full border flex items-center space-x-1 ${getStatusBadge(job.status)}`}>
+                      <span>{getStatusIcon(job.status)}</span>
+                      <span>{job.status}</span>
                     </span>
                   </td>
                   <td className="px-6 py-4">

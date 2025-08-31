@@ -106,9 +106,30 @@ class PyTorchRunner(ModelRunner):
 
         try:
             import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from transformers import (
+                AutoConfig,
+                AutoModelForCausalLM,
+                AutoModelForSeq2SeqLM,
+                AutoTokenizer,
+            )
 
             logger.info(f"Loading PyTorch model: {self.model_name} on device: {self.device}")
+
+            # First, get the model config to determine the model architecture
+            config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
+            
+            # Determine which AutoModel class to use based on the model architecture
+            model_class = AutoModelForCausalLM  # Default
+            
+            # Check if it's a sequence-to-sequence model
+            if hasattr(config, 'is_encoder_decoder') and config.is_encoder_decoder:
+                model_class = AutoModelForSeq2SeqLM
+                logger.info("Detected encoder-decoder model, using AutoModelForSeq2SeqLM")
+            elif config.model_type in ['t5', 'bart', 'pegasus', 'mbart', 'marian', 'blenderbot']:
+                model_class = AutoModelForSeq2SeqLM
+                logger.info(f"Detected {config.model_type} model, using AutoModelForSeq2SeqLM")
+            else:
+                logger.info(f"Using AutoModelForCausalLM for {config.model_type} model")
 
             # Configure device and memory settings
             device_map = None
@@ -132,8 +153,8 @@ class PyTorchRunner(ModelRunner):
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            # Load model with optimizations
-            self.model = AutoModelForCausalLM.from_pretrained(
+            # Load model with the appropriate class
+            self.model = model_class.from_pretrained(
                 self.model_path,
                 torch_dtype=torch_dtype,
                 device_map=device_map,
@@ -185,21 +206,62 @@ class PyTorchRunner(ModelRunner):
             model, tokenizer = self._load_model()
 
             # Default parameters optimized for your hardware
-            params = {
+            default_params = {
                 "max_new_tokens": 512,
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "top_k": 50,
                 "do_sample": True,
-                "pad_token_id": tokenizer.eos_token_id,
                 "repetition_penalty": 1.1,
-                **(parameters or {}),
             }
+            
+            # Add pad_token_id if available
+            if tokenizer.eos_token_id is not None:
+                default_params["pad_token_id"] = tokenizer.eos_token_id
+            
+            # Merge with user parameters
+            params = {**default_params, **(parameters or {})}
+
+            # Filter out invalid generation parameters
+            valid_generate_params = {
+                'max_length', 'max_new_tokens', 'min_length', 'min_new_tokens',
+                'do_sample', 'early_stopping', 'num_beams', 'num_beam_groups',
+                'diversity_penalty', 'temperature', 'top_k', 'top_p', 'typical_p',
+                'epsilon_cutoff', 'eta_cutoff', 'repetition_penalty', 'no_repeat_ngram_size',
+                'encoder_no_repeat_ngram_size', 'bad_words_ids', 'force_words_ids',
+                'renormalize_logits', 'constraints', 'forced_bos_token_id',
+                'forced_eos_token_id', 'remove_invalid_values', 'exponential_decay_length_penalty',
+                'suppress_tokens', 'begin_suppress_tokens', 'forced_decoder_ids',
+                'sequence_bias', 'guidance_scale', 'low_memory', 'num_return_sequences',
+                'output_attentions', 'output_hidden_states', 'output_scores',
+                'pad_token_id', 'eos_token_id', 'use_cache', 'generation_config'
+            }
+            
+            # Filter parameters to only include valid generation parameters
+            filtered_params = {k: v for k, v in params.items() if k in valid_generate_params}
+            
+            # Log filtered out parameters for debugging
+            filtered_out = {k: v for k, v in params.items() if k not in valid_generate_params}
+            if filtered_out:
+                logger.debug(
+                    f"Filtered out invalid generation parameters: {list(filtered_out.keys())}"
+                )
 
             logger.info(f"Running PyTorch model {self.model_name} with prompt: {prompt[:100]}...")
 
+            # Check if this is a seq2seq model
+            is_seq2seq = (
+                hasattr(model.config, 'is_encoder_decoder') 
+                and model.config.is_encoder_decoder
+            )
+
             # Tokenize input
-            inputs = tokenizer.encode(prompt, return_tensors="pt", padding=True)
+            if is_seq2seq:
+                # For seq2seq models, use encoder inputs
+                inputs = tokenizer.encode(prompt, return_tensors="pt", padding=True)
+            else:
+                # For causal LM models, use the standard approach
+                inputs = tokenizer.encode(prompt, return_tensors="pt", padding=True)
 
             # Move inputs to device
             if hasattr(inputs, "to"):
@@ -209,15 +271,28 @@ class PyTorchRunner(ModelRunner):
             import torch
 
             with torch.no_grad():
-                # Generate tokens (simplified for compatibility)
-                outputs = model.generate(
-                    inputs, **{k: v for k, v in params.items() if k != "pad_token_id"}
-                )
+                if is_seq2seq:
+                    # For seq2seq models, generate from encoder outputs
+                    outputs = model.generate(
+                        input_ids=inputs,
+                        **{k: v for k, v in filtered_params.items() if k != "pad_token_id"}
+                    )
+                else:
+                    # For causal LM models, generate continuing from input
+                    outputs = model.generate(
+                        inputs, 
+                        **{k: v for k, v in filtered_params.items() if k != "pad_token_id"}
+                    )
 
-            # Decode output (skip the input tokens)
-            input_length = inputs.shape[1]
-            generated_tokens = outputs[0][input_length:]
-            output_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            # Decode output
+            if is_seq2seq:
+                # For seq2seq models, decode the entire output (no input skipping needed)
+                output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            else:
+                # For causal LM models, skip the input tokens
+                input_length = inputs.shape[1]
+                generated_tokens = outputs[0][input_length:]
+                output_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
             # Clean up GPU memory
             if self.device == "cuda":
@@ -243,7 +318,7 @@ class PyTorchRunner(ModelRunner):
                     import torch
 
                     torch.cuda.empty_cache()
-                except:
+                except Exception:
                     pass
 
             return RunResult(
@@ -322,5 +397,5 @@ class PyTorchRunner(ModelRunner):
                 import torch
 
                 torch.cuda.empty_cache()
-        except:
+        except Exception:
             pass

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 import uuid
 from datetime import datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -382,6 +386,120 @@ async def create_job(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process job: {str(e)}",
+        )
+
+
+@router.post("/run/{model_name}/audio", response_model=JobCreateResponse)
+async def create_audio_job(
+    model_name: str,
+    audio: UploadFile = File(..., description="Audio file to process"),
+    task_type: str = Form(default="speech_to_text", description="Type of AI task"),
+    parameters: str = Form(default="{}", description="Model parameters as JSON string"),
+    db: Session = Depends(get_session),
+) -> JobCreateResponse:
+    """Create and queue a job for a model with audio file input."""
+    # Get the model
+    model = ai_crud.get_model_by_name(db, name=model_name)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model '{model_name}' not found",
+        )
+
+    if not model.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Model '{model_name}' is not active",
+        )
+
+    # Validate audio file
+    if not audio.content_type or not audio.content_type.startswith("audio/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file must be an audio file",
+        )
+
+    # Parse parameters
+    try:
+        params_dict = json.loads(parameters)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parameters must be valid JSON",
+        )
+
+    # Save audio file temporarily
+    os.makedirs("tmp", exist_ok=True)
+    temp_file_path = f"tmp/{uuid.uuid4()}_{audio.filename}"
+    
+    try:
+        # Read and save the audio file
+        audio_content = await audio.read()
+        with open(temp_file_path, "wb") as temp_file:
+            temp_file.write(audio_content)
+
+        # Create job record with file path
+        job = ai_crud.create_job(
+            db,
+            model_name=model_name,
+            backend=model.backend,
+            prompt="",  # Empty prompt for audio tasks
+            task_type=task_type,
+            input_files=[temp_file_path],
+            parameters=params_dict,
+        )
+
+        logger.info(f"Created audio job {job.id} for model {model_name} with file {temp_file_path}")
+
+        # Try to use embedded worker queue first, fallback to synchronous processing
+        try:
+            from main import embedded_worker_manager
+
+            if embedded_worker_manager:
+                queue_job_id = embedded_worker_manager.enqueue_job(job.id)
+                if queue_job_id:
+                    return JobCreateResponse(
+                        job_id=job.id,
+                        message=f"Audio job created and queued (queue ID: {queue_job_id})",
+                    )
+                else:
+                    logger.warning("Failed to enqueue job, falling back to synchronous processing")
+            else:
+                logger.info("No embedded workers available, using synchronous processing")
+
+            # Synchronous fallback processing
+            await _execute_job(job.id, db)
+            return JobCreateResponse(
+                job_id=job.id,
+                message="Audio job created and processed synchronously",
+            )
+
+        except Exception as e:
+            # Clean up temp file on error
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            
+            # If all processing fails, update job status to failed
+            ai_crud.update_job_status(
+                db,
+                job_id=job.id,
+                status=JobStatus.failed,
+                error_message=f"Failed to process audio job: {str(e)}",
+                completed_at=datetime.utcnow(),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process audio job: {str(e)}",
+            )
+
+    except Exception as e:
+        # Clean up temp file on any error
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        logger.error(f"Error processing audio job: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing audio file: {str(e)}",
         )
 
 

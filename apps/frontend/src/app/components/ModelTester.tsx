@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import VoiceRecorder from './VoiceRecorder';
 import type { Model } from '../types';
 
 interface ModelTesterProps {
@@ -11,6 +12,13 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
+
+  const isWhisperModel = model.backend === 'whisper' || 
+                        model.supported_tasks.includes('speech_to_text') ||
+                        model.name.toLowerCase().includes('whisper');
 
   const testPrompts = {
     text_generation: [
@@ -29,35 +37,85 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
   };
 
   const handleTest = async () => {
-    if (!prompt.trim()) return;
+    if (!isWhisperModel && !prompt.trim()) return;
+    if (isWhisperModel && !recordedAudio && !audioFile) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const response = await fetch(`http://localhost:8000/api/run/${model.name}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let requestBody;
+      const headers: Record<string, string> = {};
+
+      if (isWhisperModel && (recordedAudio || audioFile)) {
+        // For Whisper models, we need to upload the audio file
+        const formData = new FormData();
+        const audioFileToUpload = audioFile || new File([recordedAudio!], 'recording.webm', { type: 'audio/webm' });
+        formData.append('audio', audioFileToUpload);
+        formData.append('task_type', 'speech_to_text');
+        formData.append('parameters', JSON.stringify(model.config));
+
+        // Use FormData for file upload with the audio-specific endpoint
+        requestBody = formData;
+        
+        const response = await fetch(`http://localhost:8000/api/run/${model.name}/audio`, {
+          method: 'POST',
+          body: requestBody,
+        });
+
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Poll for job completion
+          await pollJobResult(data.job_id);
+        } else {
+          setError(data.detail || 'Failed to run audio test');
+        }
+      } else {
+        // For text models
+        headers['Content-Type'] = 'application/json';
+        requestBody = JSON.stringify({
           task_type: model.supported_tasks[0] || 'text_generation',
           prompt,
           parameters: model.config,
-        }),
-      });
+        });
+        
+        const response = await fetch(`http://localhost:8000/api/run/${model.name}`, {
+          method: 'POST',
+          headers,
+          body: requestBody,
+        });
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        // Poll for job completion
-        await pollJobResult(data.job_id);
-      } else {
-        setError(data.detail || 'Failed to run test');
+        const data = await response.json();
+        
+        if (response.ok) {
+          // Poll for job completion
+          await pollJobResult(data.job_id);
+        } else {
+          setError(data.detail || 'Failed to run test');
+        }
       }
-    } catch (err) {
+    } catch (error) {
       setError('Network error occurred');
+      console.error('Test error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRecordingComplete = (audioBlob: Blob, duration: number) => {
+    setRecordedAudio(audioBlob);
+    setRecordingDuration(duration);
+    setAudioFile(null); // Clear file input if user recorded
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setAudioFile(file);
+      setRecordedAudio(null); // Clear recording if user uploaded file
+      setRecordingDuration(0);
     }
   };
 
@@ -72,7 +130,18 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
 
         if (job.status === 'completed') {
           if (job.result?.output) {
-            setResult(job.result.output);
+            // Handle Whisper transcription results
+            if (isWhisperModel && job.result.output.transcriptions) {
+              const transcriptions = job.result.output.transcriptions;
+              if (transcriptions.length > 0) {
+                setResult(transcriptions[0].transcription);
+              } else {
+                setResult('No transcription available');
+              }
+            } else {
+              // Handle other model results
+              setResult(typeof job.result.output === 'string' ? job.result.output : JSON.stringify(job.result.output, null, 2));
+            }
           } else {
             setResult(JSON.stringify(job.result, null, 2));
           }
@@ -84,7 +153,7 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
         } else {
           setError('Test timed out');
         }
-      } catch (err) {
+      } catch {
         setError('Failed to get job result');
       }
     };
@@ -124,34 +193,89 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Quick Test Prompts */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Quick Test Prompts</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {getCurrentPrompts().map((testPrompt, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => setPrompt(testPrompt)}
-                  className="text-left p-3 bg-gray-700/30 hover:bg-gray-700/50 rounded-lg text-sm text-gray-300 transition-colors"
-                >
-                  {testPrompt}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Voice Recording for Whisper Models */}
+          {isWhisperModel ? (
+            <div className="space-y-6">
+              {/* Voice Recording Section */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-4">Record Your Voice</h3>
+                <div className="bg-gray-700/20 rounded-lg p-6">
+                  <VoiceRecorder
+                    onRecordingComplete={handleRecordingComplete}
+                    maxDuration={60}
+                    className="w-full"
+                  />
+                  {recordedAudio && (
+                    <div className="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <div className="text-green-400 text-sm">
+                        ✅ Recording ready ({recordingDuration}s) - Click &quot;Run Test&quot; to transcribe
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          {/* Custom Prompt */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-300 mb-2">Custom Prompt</h3>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={4}
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
-              placeholder="Enter your test prompt..."
-            />
-          </div>
+              {/* File Upload Alternative */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-2">Or Upload Audio File</h3>
+                <div className="border-2 border-dashed border-gray-600 rounded-lg p-6">
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="audio-upload"
+                  />
+                  <label
+                    htmlFor="audio-upload"
+                    className="cursor-pointer flex flex-col items-center justify-center text-center"
+                  >
+                    <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <title>Upload Audio</title>
+                      <path d="M7 16a4 4 0 0 1-.88-7.903A5 5 0 1 1 15.9 6L16 6a5 5 0 0 1 1 9.9M9 19l3 3m0 0 3-3m-3 3V10"/>
+                    </svg>
+                    <span className="text-gray-400">
+                      {audioFile ? `Selected: ${audioFile.name}` : 'Click to upload audio file'}
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      Supports: MP3, WAV, M4A, OGG, FLAC
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Quick Test Prompts */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-3">Quick Test Prompts</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {getCurrentPrompts().map((testPrompt, promptIndex) => (
+                    <button
+                      key={`prompt-${testPrompt.slice(0, 20)}-${promptIndex}`}
+                      type="button"
+                      onClick={() => setPrompt(testPrompt)}
+                      className="text-left p-3 bg-gray-700/30 hover:bg-gray-700/50 rounded-lg text-sm text-gray-300 transition-colors"
+                    >
+                      {testPrompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Prompt */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-300 mb-2">Custom Prompt</h3>
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+                  placeholder="Enter your test prompt..."
+                />
+              </div>
+            </>
+          )}
 
           {/* Model Config */}
           <div className="bg-gray-700/20 rounded-lg p-4">
@@ -162,20 +286,41 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
           </div>
 
           {/* Test Button */}
-          <div className="flex justify-center">
+          <div className="flex items-center justify-between pt-4">
+            <div className="text-xs text-gray-500">
+              {isWhisperModel
+                ? (recordedAudio || audioFile)
+                  ? 'Audio ready for transcription'
+                  : 'Record voice or upload audio file to test'
+                : `${prompt.length}/1000 characters`
+              }
+            </div>
             <button
               type="button"
               onClick={handleTest}
-              disabled={!prompt.trim() || loading}
-              className="px-6 py-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              disabled={
+                loading ||
+                (isWhisperModel ? (!recordedAudio && !audioFile) : !prompt.trim())
+              }
+              className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all duration-200 flex items-center space-x-2"
             >
               {loading ? (
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin w-4 h-4 border-2 border-white/20 border-t-white rounded-full" />
-                  <span>Running Test...</span>
-                </div>
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <title>Loading</title>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>Processing...</span>
+                </>
               ) : (
-                'Run Test'
+                <>
+                  <span>{isWhisperModel ? 'Transcribe' : 'Run Test'}</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <title>Run</title>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </>
               )}
             </button>
           </div>
@@ -193,11 +338,22 @@ const ModelTester = ({ model, onClose }: ModelTesterProps) => {
 
               {result && (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                  <div className="text-green-400 text-sm mb-2">✅ Test Successful</div>
+                  <div className="text-green-400 text-sm mb-2">
+                    ✅ {isWhisperModel ? 'Transcription Complete' : 'Test Successful'}
+                  </div>
                   <div className="bg-gray-800/50 rounded p-3">
-                    <pre className="text-gray-300 whitespace-pre-wrap text-sm">
-                      {result}
-                    </pre>
+                    {isWhisperModel ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-gray-400 mb-2">Transcribed Text:</div>
+                        <div className="text-gray-300 text-sm leading-relaxed">
+                          &ldquo;{result}&rdquo;
+                        </div>
+                      </div>
+                    ) : (
+                      <pre className="text-gray-300 whitespace-pre-wrap text-sm">
+                        {result}
+                      </pre>
+                    )}
                   </div>
                 </div>
               )}

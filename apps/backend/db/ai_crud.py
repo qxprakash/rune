@@ -96,6 +96,96 @@ def delete_model(db: Session, *, model_id: uuid.UUID) -> bool:
     return True
 
 
+def deregister_model(db: Session, *, model_id: uuid.UUID, force: bool = False) -> dict[str, Any]:
+    """
+    Deregister a model completely from the system.
+    
+    Args:
+        db: Database session
+        model_id: ID of the model to deregister
+        force: If True, force deregistration even if model has associated jobs
+        
+    Returns:
+        Dictionary with deregistration results and cleanup information
+    """
+    model = get_model(db, model_id=model_id)
+    if not model:
+        return {"success": False, "error": "Model not found"}
+
+    # Check for associated jobs
+    associated_jobs = get_jobs(db, model_name=model.name, limit=1000)
+    
+    # Count jobs by status
+    job_counts = {}
+    for job in associated_jobs:
+        status = job.status.value if hasattr(job.status, 'value') else str(job.status)
+        job_counts[status] = job_counts.get(status, 0) + 1
+    
+    # Check if there are running jobs
+    running_jobs = [job for job in associated_jobs if job.status.value == "running"]
+    queued_jobs = [job for job in associated_jobs if job.status.value == "queued"]
+    
+    if (running_jobs or queued_jobs) and not force:
+        return {
+            "success": False,
+            "error": "Cannot deregister model with active jobs",
+            "details": {
+                "running_jobs": len(running_jobs),
+                "queued_jobs": len(queued_jobs),
+                "total_associated_jobs": len(associated_jobs),
+                "job_counts": job_counts,
+                "suggestion": "Use force=True to deregister anyway or cancel running jobs first"
+            }
+        }
+    
+    # Perform cleanup
+    cleanup_results = {
+        "model_deleted": False,
+        "jobs_affected": len(associated_jobs),
+        "job_counts": job_counts,
+        "cache_cleared": False,
+    }
+    
+    try:
+        # If forcing deregistration, update running/queued jobs to failed status
+        if force and (running_jobs or queued_jobs):
+            from db.models import JobStatus
+            for job in running_jobs + queued_jobs:
+                update_job_status(
+                    db,
+                    job_id=job.id,
+                    status=JobStatus.failed,
+                    error_message=f"Job cancelled due to model '{model.name}' deregistration"
+                )
+        
+        # Delete the model record (hard delete)
+        db.delete(model)
+        db.commit()
+        cleanup_results["model_deleted"] = True
+        
+        # Clear model cache if available
+        try:
+            from runners.pytorch import PyTorchRunner
+            PyTorchRunner.clear_cache()
+            cleanup_results["cache_cleared"] = True
+        except Exception:
+            pass  # Cache clearing is optional
+        
+        return {
+            "success": True,
+            "message": f"Model '{model.name}' deregistered successfully",
+            "cleanup": cleanup_results
+        }
+        
+    except Exception as e:
+        db.rollback()
+        return {
+            "success": False,
+            "error": f"Failed to deregister model: {str(e)}",
+            "cleanup": cleanup_results
+        }
+
+
 # Jobs CRUD
 
 

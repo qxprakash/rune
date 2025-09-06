@@ -274,6 +274,57 @@ class EmbeddedWorkerManager:
         except Exception as e:
             return {"error": str(e), "queued_jobs": 0, "failed_jobs": 0, "workers": 0}
 
+    def cancel_job(self, job_id: uuid.UUID) -> bool:
+        """Cancel a specific job from the queue."""
+        if not self.redis_conn:
+            logger.warning("Cannot cancel job - Redis connection not available")
+            return False
+
+        try:
+            job_id_str = str(job_id)
+            # Get all items in the queue
+            queue_items = self.redis_conn.lrange(self.job_queue_key, 0, -1)
+            
+            # Check if job is in queue
+            if job_id_str in queue_items:
+                # Remove the job from queue
+                removed = self.redis_conn.lrem(self.job_queue_key, 1, job_id_str)
+                if removed > 0:
+                    logger.info(f"Removed job {job_id} from queue")
+                    return True
+                else:
+                    logger.warning(f"Job {job_id} found but could not be removed from queue")
+                    return False
+            else:
+                logger.warning(
+                    f"Job {job_id} not found in queue (may be running or already completed)"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(f"Error cancelling job {job_id}: {e}")
+            return False
+
+    def clear_queue(self) -> int:
+        """Clear all jobs from the queue and return count of removed jobs."""
+        if not self.redis_conn:
+            logger.warning("Cannot clear queue - Redis connection not available")
+            return 0
+
+        try:
+            # Get queue length before clearing
+            queue_length = self.redis_conn.llen(self.job_queue_key)
+            
+            # Clear the entire queue
+            self.redis_conn.delete(self.job_queue_key)
+            
+            logger.info(f"Cleared {queue_length} jobs from queue")
+            return queue_length
+
+        except Exception as e:
+            logger.error(f"Error clearing queue: {e}")
+            return 0
+
     def get_worker_status(self) -> dict:
         """Get worker status."""
         active_workers = []

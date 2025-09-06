@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from loguru import logger
@@ -312,6 +313,180 @@ async def delete_model(
     return {"message": "Model deleted successfully"}
 
 
+@router.delete("/models/{model_id}/deregister")
+async def deregister_model(
+    model_id: uuid.UUID,
+    force: bool = False,
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Deregister a model completely from the system.
+    
+    This endpoint:
+    - Removes the model record from the database (hard delete)
+    - Validates no active jobs are using the model (unless force=True)
+    - Cancels running/queued jobs if force=True
+    - Clears model cache
+    - Provides detailed cleanup information
+    
+    Args:
+        model_id: UUID of the model to deregister
+        force: If True, force deregistration even with active jobs
+        
+    Returns:
+        Deregistration results with cleanup details
+    """
+    # Get the model first to check if it exists and get its name
+    model = ai_crud.get_model(db, model_id=model_id)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model with ID {model_id} not found",
+        )
+    
+    logger.info(f"Attempting to deregister model: {model.name} (ID: {model_id}, force: {force})")
+    
+    # Perform deregistration
+    result = ai_crud.deregister_model(db, model_id=model_id, force=force)
+    
+    if not result["success"]:
+        # Check if it's a validation error (active jobs) or system error
+        if "active jobs" in result.get("error", ""):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": result["error"],
+                    "details": result.get("details", {}),
+                    "model_name": model.name
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result["error"]
+            )
+    
+    # If we have running/queued jobs and force=True, also clear them from the queue
+    if force and result.get("cleanup", {}).get("jobs_affected", 0) > 0:
+        try:
+            from main import embedded_worker_manager
+            if embedded_worker_manager:
+                # Clear any queued jobs for this model from Redis
+                # Note: This is a best-effort cleanup since we can't easily filter by model name
+                queue_status = embedded_worker_manager.get_queue_status()
+                logger.info(f"Queue status during model deregistration: {queue_status}")
+        except Exception as e:
+            logger.warning(f"Could not clear queue during model deregistration: {e}")
+    
+    logger.info(f"Successfully deregistered model: {model.name}")
+    
+    return {
+        "message": result["message"],
+        "model_name": model.name,
+        "model_id": str(model_id),
+        "deregistration_details": result["cleanup"],
+        "forced": force
+    }
+
+
+@router.post("/models/deregister-bulk")
+async def deregister_models_bulk(
+    model_data: dict[str, Any],
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Deregister multiple models in bulk.
+    
+    Request body:
+    {
+        "model_ids": ["uuid1", "uuid2", ...],
+        "force": false,
+        "inactive_only": true  // Only deregister inactive models
+    }
+    """
+    model_ids = model_data.get("model_ids", [])
+    force = model_data.get("force", False)
+    inactive_only = model_data.get("inactive_only", True)
+    
+    if not model_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No model IDs provided"
+        )
+    
+    results = {
+        "successful": [],
+        "failed": [],
+        "skipped": [],
+        "total_requested": len(model_ids),
+        "summary": {}
+    }
+    
+    for model_id_str in model_ids:
+        try:
+            model_id = uuid.UUID(model_id_str)
+            model = ai_crud.get_model(db, model_id=model_id)
+            
+            if not model:
+                results["failed"].append({
+                    "model_id": model_id_str,
+                    "error": "Model not found"
+                })
+                continue
+            
+            # Skip active models if inactive_only is True
+            if inactive_only and model.is_active:
+                results["skipped"].append({
+                    "model_id": model_id_str,
+                    "model_name": model.name,
+                    "reason": "Model is active (use inactive_only=false to include)"
+                })
+                continue
+            
+            # Attempt deregistration
+            result = ai_crud.deregister_model(db, model_id=model_id, force=force)
+            
+            if result["success"]:
+                results["successful"].append({
+                    "model_id": model_id_str,
+                    "model_name": model.name,
+                    "cleanup": result["cleanup"]
+                })
+            else:
+                results["failed"].append({
+                    "model_id": model_id_str,
+                    "model_name": model.name,
+                    "error": result["error"]
+                })
+                
+        except ValueError:
+            results["failed"].append({
+                "model_id": model_id_str,
+                "error": "Invalid UUID format"
+            })
+        except Exception as e:
+            results["failed"].append({
+                "model_id": model_id_str,
+                "error": f"Unexpected error: {str(e)}"
+            })
+    
+    # Generate summary
+    success_rate = (
+        f"{len(results['successful']) / len(model_ids) * 100:.1f}%" 
+        if model_ids else "0%"
+    )
+    results["summary"] = {
+        "successful_count": len(results["successful"]),
+        "failed_count": len(results["failed"]),
+        "skipped_count": len(results["skipped"]),
+        "success_rate": success_rate
+    }
+    
+    logger.info(f"Bulk deregistration completed: {results['summary']}")
+    
+    return results
+
+
 @router.post("/models/validate")
 async def validate_model_name(
     model_data: dict[str, str],
@@ -577,6 +752,83 @@ async def get_job(
             detail=f"Job with ID {job_id} not found",
         )
     return JobResponse.model_validate(job)
+
+
+@router.delete("/jobs/{job_id}")
+async def cancel_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_session),
+) -> dict[str, str]:
+    """Cancel a queued or running job."""
+    job = ai_crud.get_job(db, job_id=job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job with ID {job_id} not found",
+        )
+
+    if job.status in [JobStatus.completed, JobStatus.failed]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel job with status: {job.status}",
+        )
+
+    # Try to cancel the job
+    from main import embedded_worker_manager
+
+    if embedded_worker_manager:
+        success = embedded_worker_manager.cancel_job(job_id)
+        if success:
+            # Update job status in database
+            ai_crud.update_job_status(
+                db, job_id, JobStatus.failed, error_message="Job cancelled by user"
+            )
+            logger.info(f"Successfully cancelled job {job_id}")
+            return {"message": f"Job {job_id} cancelled successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to cancel job from queue",
+            )
+    else:
+        # If no worker manager, just update status in database
+        ai_crud.update_job_status(
+            db, job_id, JobStatus.failed, error_message="Job cancelled by user"
+        )
+        logger.warning(f"Cancelled job {job_id} in database (no worker manager available)")
+        return {"message": f"Job {job_id} cancelled in database"}
+
+
+@router.post("/jobs/cancel-all")
+async def cancel_all_jobs(
+    db: Session = Depends(get_session),
+) -> dict[str, str | int]:
+    """Cancel all queued and running jobs."""
+    from main import embedded_worker_manager
+
+    cancelled_count = 0
+    
+    if embedded_worker_manager:
+        # Clear the entire queue
+        cancelled_count = embedded_worker_manager.clear_queue()
+        
+        # Update all queued/running jobs in database to failed status
+        queued_jobs = ai_crud.get_jobs(db, status=JobStatus.queued, limit=1000)
+        running_jobs = ai_crud.get_jobs(db, status=JobStatus.running, limit=1000)
+        
+        for job in queued_jobs + running_jobs:
+            ai_crud.update_job_status(
+                db, job.id, JobStatus.failed, error_message="Job cancelled by user (bulk cancel)"
+            )
+            cancelled_count += 1
+
+        logger.info(f"Cancelled {cancelled_count} jobs in bulk operation")
+        return {"message": f"Cancelled {cancelled_count} jobs", "cancelled_count": cancelled_count}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Worker manager not available",
+        )
 
 
 @router.post("/batch", response_model=BatchJobResponse)

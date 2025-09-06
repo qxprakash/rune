@@ -1,8 +1,16 @@
+'use client';
+
 import type { SystemStatus } from '../types';
 
-// Icons as simple SVG components
+// Icons as simple SVG components - using suppressHydrationWarning to prevent DarkReader conflicts
 const HomeIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
     <title>Home</title>
     <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
     <polyline points="9,22 9,12 15,12 15,22"/>
@@ -10,7 +18,13 @@ const HomeIcon = () => (
 );
 
 const ModelsIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
     <title>Models</title>
     <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
     <line x1="8" y1="21" x2="16" y2="21"/>
@@ -19,7 +33,13 @@ const ModelsIcon = () => (
 );
 
 const JobsIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
     <title>Jobs</title>
     <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
     <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
@@ -27,7 +47,13 @@ const JobsIcon = () => (
 );
 
 const SystemIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
     <title>System</title>
     <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
     <rect x="9" y="9" width="6" height="6"/>

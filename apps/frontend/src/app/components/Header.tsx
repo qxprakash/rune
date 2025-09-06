@@ -1,8 +1,17 @@
+'use client';
+
 import type { SystemStatus } from '../types';
 
-// Icons as simple SVG components
+// Icons as simple SVG components - using suppressHydrationWarning to prevent DarkReader conflicts
 const CpuIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
+    <title>CPU</title>
     <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
     <rect x="9" y="9" width="6" height="6"/>
     <line x1="9" y1="1" x2="9" y2="4"/>
@@ -17,7 +26,14 @@ const CpuIcon = () => (
 );
 
 const DatabaseIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
+    <title>Database</title>
     <ellipse cx="12" cy="5" rx="9" ry="3"/>
     <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
@@ -25,14 +41,28 @@ const DatabaseIcon = () => (
 );
 
 const BrainIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
+    <title>AI Brain</title>
     <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.51 2.51 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/>
     <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.51 2.51 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/>
   </svg>
 );
 
 const ActivityIcon = () => (
-  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg 
+    className="w-5 h-5" 
+    fill="none" 
+    stroke="currentColor" 
+    viewBox="0 0 24 24"
+    suppressHydrationWarning={true}
+  >
+    <title>Activity</title>
     <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
   </svg>
 );

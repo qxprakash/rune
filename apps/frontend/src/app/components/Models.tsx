@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { Model } from '../types';
 import ModelTester from './ModelTester';
 import AddModelModal from './AddModelModal';
+import DeregisterModelModal from './DeregisterModelModal';
+import BulkDeregisterModal from './BulkDeregisterModal';
 
 const Models = () => {
   const [models, setModels] = useState<Model[]>([]);
@@ -11,6 +14,10 @@ const Models = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTester, setShowTester] = useState(false);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [showDeregister, setShowDeregister] = useState(false);
+  const [showBulkDeregister, setShowBulkDeregister] = useState(false);
+  const [bulkSelectMode, setBulkSelectMode] = useState(false);
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
 
   const fetchModels = useCallback(async () => {
     try {
@@ -83,6 +90,37 @@ const Models = () => {
     });
   };
 
+  const handleModelSelect = (modelId: string) => {
+    const newSelected = new Set(selectedModels);
+    if (newSelected.has(modelId)) {
+      newSelected.delete(modelId);
+    } else {
+      newSelected.add(modelId);
+    }
+    setSelectedModels(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedModels.size === models.length) {
+      setSelectedModels(new Set());
+    } else {
+      setSelectedModels(new Set(models.map(m => m.id)));
+    }
+  };
+
+  const handleDeregisterModel = (model: Model) => {
+    setSelectedModel(model);
+    setShowDeregister(true);
+  };
+
+  const handleCloseModals = () => {
+    setShowDeregister(false);
+    setShowBulkDeregister(false);
+    setBulkSelectMode(false);
+    setSelectedModels(new Set());
+    setSelectedModel(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -100,6 +138,39 @@ const Models = () => {
           <p className="text-gray-400">Manage your AI model registry</p>
         </div>
         <div className="flex space-x-3">
+          {models.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setBulkSelectMode(!bulkSelectMode)}
+                className={`px-4 py-2 border rounded-lg transition-colors ${
+                  bulkSelectMode
+                    ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
+                    : 'bg-purple-500/20 text-purple-400 border-purple-500/30 hover:bg-purple-500/30'
+                }`}
+              >
+                {bulkSelectMode ? 'Exit Bulk Mode' : 'Bulk Operations'}
+              </button>
+              {bulkSelectMode && (
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  className="px-4 py-2 bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg hover:bg-gray-500/30 transition-colors"
+                >
+                  {selectedModels.size === models.length ? 'Deselect All' : 'Select All'}
+                </button>
+              )}
+              {bulkSelectMode && selectedModels.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowBulkDeregister(true)}
+                  className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+                >
+                  Deregister Selected ({selectedModels.size})
+                </button>
+              )}
+            </>
+          )}
           <button
             type="button"
             onClick={handleDiscoverModels}
@@ -155,15 +226,37 @@ const Models = () => {
         {models.map((model) => (
           <div key={model.id} className="bg-gray-800/30 border border-gray-700 rounded-lg p-6">
             <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-white mb-1">{model.name}</h3>
-                <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getBackendColor(model.backend)}`}>
-                  {model.backend}
-                </span>
+              <div className="flex items-center flex-1">
+                {bulkSelectMode && (
+                  <input
+                    type="checkbox"
+                    checked={selectedModels.has(model.id)}
+                    onChange={() => handleModelSelect(model.id)}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3"
+                  />
+                )}
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-white mb-1">{model.name}</h3>
+                  <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getBackendColor(model.backend)}`}>
+                    {model.backend}
+                  </span>
+                </div>
               </div>
-              <div className={`w-3 h-3 rounded-full ${
-                model.is_active ? 'bg-green-400' : 'bg-gray-500'
-              } status-pulse`} />
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  model.is_active ? 'bg-green-400' : 'bg-gray-500'
+                } status-pulse`} />
+                {!bulkSelectMode && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeregisterModel(model)}
+                    className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                    title="Deregister model"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {model.description && (
@@ -278,6 +371,30 @@ const Models = () => {
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             setShowAddModal(false);
+            fetchModels();
+          }}
+        />
+      )}
+
+      {/* Deregister Model Modal */}
+      {showDeregister && selectedModel && (
+        <DeregisterModelModal
+          model={selectedModel}
+          onClose={handleCloseModals}
+          onSuccess={() => {
+            handleCloseModals();
+            fetchModels();
+          }}
+        />
+      )}
+
+      {/* Bulk Deregister Modal */}
+      {showBulkDeregister && (
+        <BulkDeregisterModal
+          models={models}
+          onClose={handleCloseModals}
+          onSuccess={() => {
+            handleCloseModals();
             fetchModels();
           }}
         />

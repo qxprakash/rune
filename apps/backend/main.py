@@ -19,7 +19,6 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     logger.info("Starting AI Playground Backend")
 
-    # Test database connection
     try:
         from sqlalchemy import text
 
@@ -29,7 +28,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
 
-    # Start embedded workers
     try:
         import os
 

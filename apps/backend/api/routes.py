@@ -56,7 +56,6 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
         logger.error(f"Database health check failed: {e}")
         database_ok = False
 
-    # Check runner availability
     runners_status = {}
     for backend, runner_class in RUNNERS.items():
         try:
@@ -321,18 +320,18 @@ async def deregister_model(
 ) -> dict[str, Any]:
     """
     Deregister a model completely from the system.
-    
+
     This endpoint:
     - Removes the model record from the database (hard delete)
     - Validates no active jobs are using the model (unless force=True)
     - Cancels running/queued jobs if force=True
     - Clears model cache
     - Provides detailed cleanup information
-    
+
     Args:
         model_id: UUID of the model to deregister
         force: If True, force deregistration even with active jobs
-        
+
     Returns:
         Deregistration results with cleanup details
     """
@@ -343,12 +342,12 @@ async def deregister_model(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model with ID {model_id} not found",
         )
-    
+
     logger.info(f"Attempting to deregister model: {model.name} (ID: {model_id}, force: {force})")
-    
+
     # Perform deregistration
     result = ai_crud.deregister_model(db, model_id=model_id, force=force)
-    
+
     if not result["success"]:
         # Check if it's a validation error (active jobs) or system error
         if "active jobs" in result.get("error", ""):
@@ -357,19 +356,19 @@ async def deregister_model(
                 detail={
                     "error": result["error"],
                     "details": result.get("details", {}),
-                    "model_name": model.name
-                }
+                    "model_name": model.name,
+                },
             )
         else:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result["error"]
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result["error"]
             )
-    
+
     # If we have running/queued jobs and force=True, also clear them from the queue
     if force and result.get("cleanup", {}).get("jobs_affected", 0) > 0:
         try:
             from main import embedded_worker_manager
+
             if embedded_worker_manager:
                 # Clear any queued jobs for this model from Redis
                 # Note: This is a best-effort cleanup since we can't easily filter by model name
@@ -377,15 +376,15 @@ async def deregister_model(
                 logger.info(f"Queue status during model deregistration: {queue_status}")
         except Exception as e:
             logger.warning(f"Could not clear queue during model deregistration: {e}")
-    
+
     logger.info(f"Successfully deregistered model: {model.name}")
-    
+
     return {
         "message": result["message"],
         "model_name": model.name,
         "model_id": str(model_id),
         "deregistration_details": result["cleanup"],
-        "forced": force
+        "forced": force,
     }
 
 
@@ -396,7 +395,7 @@ async def deregister_models_bulk(
 ) -> dict[str, Any]:
     """
     Deregister multiple models in bulk.
-    
+
     Request body:
     {
         "model_ids": ["uuid1", "uuid2", ...],
@@ -407,83 +406,74 @@ async def deregister_models_bulk(
     model_ids = model_data.get("model_ids", [])
     force = model_data.get("force", False)
     inactive_only = model_data.get("inactive_only", True)
-    
+
     if not model_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No model IDs provided"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No model IDs provided")
+
     results = {
         "successful": [],
         "failed": [],
         "skipped": [],
         "total_requested": len(model_ids),
-        "summary": {}
+        "summary": {},
     }
-    
+
     for model_id_str in model_ids:
         try:
             model_id = uuid.UUID(model_id_str)
             model = ai_crud.get_model(db, model_id=model_id)
-            
+
             if not model:
-                results["failed"].append({
-                    "model_id": model_id_str,
-                    "error": "Model not found"
-                })
+                results["failed"].append({"model_id": model_id_str, "error": "Model not found"})
                 continue
-            
+
             # Skip active models if inactive_only is True
             if inactive_only and model.is_active:
-                results["skipped"].append({
-                    "model_id": model_id_str,
-                    "model_name": model.name,
-                    "reason": "Model is active (use inactive_only=false to include)"
-                })
+                results["skipped"].append(
+                    {
+                        "model_id": model_id_str,
+                        "model_name": model.name,
+                        "reason": "Model is active (use inactive_only=false to include)",
+                    }
+                )
                 continue
-            
+
             # Attempt deregistration
             result = ai_crud.deregister_model(db, model_id=model_id, force=force)
-            
+
             if result["success"]:
-                results["successful"].append({
-                    "model_id": model_id_str,
-                    "model_name": model.name,
-                    "cleanup": result["cleanup"]
-                })
+                results["successful"].append(
+                    {
+                        "model_id": model_id_str,
+                        "model_name": model.name,
+                        "cleanup": result["cleanup"],
+                    }
+                )
             else:
-                results["failed"].append({
-                    "model_id": model_id_str,
-                    "model_name": model.name,
-                    "error": result["error"]
-                })
-                
+                results["failed"].append(
+                    {"model_id": model_id_str, "model_name": model.name, "error": result["error"]}
+                )
+
         except ValueError:
-            results["failed"].append({
-                "model_id": model_id_str,
-                "error": "Invalid UUID format"
-            })
+            results["failed"].append({"model_id": model_id_str, "error": "Invalid UUID format"})
         except Exception as e:
-            results["failed"].append({
-                "model_id": model_id_str,
-                "error": f"Unexpected error: {str(e)}"
-            })
-    
+            results["failed"].append(
+                {"model_id": model_id_str, "error": f"Unexpected error: {str(e)}"}
+            )
+
     # Generate summary
     success_rate = (
-        f"{len(results['successful']) / len(model_ids) * 100:.1f}%" 
-        if model_ids else "0%"
+        f"{len(results['successful']) / len(model_ids) * 100:.1f}%" if model_ids else "0%"
     )
     results["summary"] = {
         "successful_count": len(results["successful"]),
         "failed_count": len(results["failed"]),
         "skipped_count": len(results["skipped"]),
-        "success_rate": success_rate
+        "success_rate": success_rate,
     }
-    
+
     logger.info(f"Bulk deregistration completed: {results['summary']}")
-    
+
     return results
 
 
@@ -807,15 +797,15 @@ async def cancel_all_jobs(
     from main import embedded_worker_manager
 
     cancelled_count = 0
-    
+
     if embedded_worker_manager:
         # Clear the entire queue
         cancelled_count = embedded_worker_manager.clear_queue()
-        
+
         # Update all queued/running jobs in database to failed status
         queued_jobs = ai_crud.get_jobs(db, status=JobStatus.queued, limit=1000)
         running_jobs = ai_crud.get_jobs(db, status=JobStatus.running, limit=1000)
-        
+
         for job in queued_jobs + running_jobs:
             ai_crud.update_job_status(
                 db, job.id, JobStatus.failed, error_message="Job cancelled by user (bulk cancel)"

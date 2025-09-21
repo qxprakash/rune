@@ -203,9 +203,9 @@ class WhisperRunner(ModelRunner):
     def is_available(self) -> bool:
         """Check if Whisper dependencies are available."""
         try:
-            import librosa
-            import torch
-            import transformers
+            import librosa  # noqa: F401
+            import torch  # noqa: F401
+            import transformers  # noqa: F401
 
             return True
         except ImportError as e:

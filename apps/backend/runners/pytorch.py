@@ -24,8 +24,6 @@ from .base import ModelRunner, RunResult
 
 
 class PyTorchRunner(ModelRunner):
-    """Runner for PyTorch models via HuggingFace Transformers."""
-
     # Class-level model cache to share models across instances
     _model_cache: dict[str, tuple[Any, Any]] = {}  # model_name -> (model, tokenizer)
     _device_cache: str | None = None

@@ -35,7 +35,7 @@ class PyTorchRunner(ModelRunner):
         device: str | None = None,
         max_memory_gb: float = 3.0,  # Conservative for GTX 1650ti 4GB
     ):
-        """Initialize PyTorch runner.
+        """
 
         Args:
             model_name: HuggingFace model identifier or local path

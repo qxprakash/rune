@@ -475,7 +475,6 @@ class PyTorchRunner(ModelRunner):
             pass
 
     def __del__(self):
-        """Cleanup when runner is destroyed."""
         try:
             if self.device == "cuda":
                 import torch

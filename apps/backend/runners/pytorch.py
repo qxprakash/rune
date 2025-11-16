@@ -431,7 +431,6 @@ class PyTorchRunner(ModelRunner):
     @classmethod
     def list_available_models(cls) -> list[str]:
         """List popular HuggingFace models suitable for your hardware."""
-        # Curated list of models that work well on GTX 1650ti 4GB
         return [
             # Small language models (< 1GB)
             "microsoft/DialoGPT-small",

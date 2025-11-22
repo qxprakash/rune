@@ -430,7 +430,6 @@ class PyTorchRunner(ModelRunner):
 
     @classmethod
     def list_available_models(cls) -> list[str]:
-        """List popular HuggingFace models suitable for your hardware."""
         return [
             # Small language models (< 1GB)
             "microsoft/DialoGPT-small",

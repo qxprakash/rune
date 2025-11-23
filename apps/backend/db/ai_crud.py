@@ -114,7 +114,7 @@ def deregister_model(db: Session, *, model_id: uuid.UUID, force: bool = False) -
     associated_jobs = get_jobs(db, model_name=model.name, limit=1000)
 
     # Count jobs by status
-    job_counts = {}
+    job_counts: dict[str, int] = {}
     for job in associated_jobs:
         status = job.status.value if hasattr(job.status, "value") else str(job.status)
         job_counts[status] = job_counts.get(status, 0) + 1

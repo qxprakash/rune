@@ -13,7 +13,6 @@ from .base import ModelRunner, RunResult
 
 
 class OllamaRunner(ModelRunner):
-
     def __init__(self, model_name: str, base_url: str = "http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url.rstrip("/")
@@ -29,7 +28,6 @@ class OllamaRunner(ModelRunner):
         """Run inference using Ollama API."""
         start_time = time.time()
 
-        # Ollama currently only supports text generation
         if task_type != JobType.text_generation:
             return RunResult(
                 success=False,

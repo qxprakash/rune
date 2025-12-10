@@ -25,7 +25,6 @@ class OllamaRunner(ModelRunner):
         input_files: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> RunResult:
-        """Run inference using Ollama API."""
         start_time = time.time()
 
         if task_type != JobType.text_generation:

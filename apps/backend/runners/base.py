@@ -24,7 +24,6 @@ class RunResult:
         self.execution_time_ms = execution_time_ms
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
         return {
             "success": self.success,
             "output": self.output,

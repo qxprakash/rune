@@ -7,7 +7,6 @@ from db.models import JobType
 
 
 class RunResult:
-    """Result of a model run."""
 
     def __init__(
         self,

@@ -64,7 +64,6 @@ class ModelRunner(ABC):
     @classmethod
     @abstractmethod
     def list_available_models(cls) -> list[str]:
-        """List available models for this runner type."""
         pass
 
     @classmethod

@@ -7,7 +7,6 @@ from db.models import JobType
 
 
 class RunResult:
-
     def __init__(
         self,
         success: bool,
@@ -58,7 +57,6 @@ class ModelRunner(ABC):
 
     @abstractmethod
     def is_available(self) -> bool:
-        """Check if this runner is available on the system."""
         pass
 
     @classmethod

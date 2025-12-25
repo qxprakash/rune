@@ -50,8 +50,6 @@ class ModelRunner(ABC):
             input_files: Input files for multi-modal tasks (audio, images, etc.)
             parameters: Optional parameters for the model (temperature, max_tokens, etc.)
 
-        Returns:
-            RunResult with the model output and any generated files
         """
         pass
 

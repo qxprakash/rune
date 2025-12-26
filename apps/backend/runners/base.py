@@ -64,11 +64,6 @@ class ModelRunner(ABC):
 
     @classmethod
     def get_supported_tasks(cls) -> list[JobType]:
-        """Get the task types supported by this runner.
-
-        Returns:
-            List of supported JobType values. Override in subclasses.
-        """
         return [JobType.text_generation]
 
     # Convenience methods for specific task types

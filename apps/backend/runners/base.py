@@ -42,15 +42,6 @@ class ModelRunner(ABC):
         input_files: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> RunResult:
-        """Run inference on a model.
-
-        Args:
-            prompt: Input prompt/text for the model
-            task_type: Type of AI task to perform
-            input_files: Input files for multi-modal tasks (audio, images, etc.)
-            parameters: Optional parameters for the model (temperature, max_tokens, etc.)
-
-        """
         pass
 
     @abstractmethod

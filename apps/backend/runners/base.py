@@ -57,7 +57,6 @@ class ModelRunner(ABC):
     def get_supported_tasks(cls) -> list[JobType]:
         return [JobType.text_generation]
 
-    # Convenience methods for specific task types
     async def run_text_generation(
         self, prompt: str, parameters: dict[str, Any] | None = None
     ) -> RunResult:

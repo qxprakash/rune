@@ -60,7 +60,6 @@ class ModelRunner(ABC):
     async def run_text_generation(
         self, prompt: str, parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Generate text from prompt."""
         return await self.run(prompt, JobType.text_generation, None, parameters)
 
     async def run_speech_to_text(

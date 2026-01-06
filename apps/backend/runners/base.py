@@ -65,7 +65,6 @@ class ModelRunner(ABC):
     async def run_speech_to_text(
         self, input_files: list[str], prompt: str = "", parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Transcribe audio to text."""
         return await self.run(prompt, JobType.speech_to_text, input_files, parameters)
 
     async def run_text_to_speech(

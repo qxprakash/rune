@@ -70,7 +70,6 @@ class ModelRunner(ABC):
     async def run_text_to_speech(
         self, prompt: str, parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Convert text to speech."""
         return await self.run(prompt, JobType.text_to_speech, None, parameters)
 
     async def run_image_generation(

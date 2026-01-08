@@ -75,7 +75,6 @@ class ModelRunner(ABC):
     async def run_image_generation(
         self, prompt: str, parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Generate image from prompt."""
         return await self.run(prompt, JobType.image_generation, None, parameters)
 
     async def run_image_to_text(

@@ -80,7 +80,6 @@ class ModelRunner(ABC):
     async def run_image_to_text(
         self, input_files: list[str], prompt: str = "", parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Analyze/describe images."""
         return await self.run(prompt, JobType.image_to_text, input_files, parameters)
 
     async def run_embeddings(

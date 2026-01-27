@@ -32,8 +32,6 @@ class RunResult:
 
 
 class ModelRunner(ABC):
-    """Abstract base class for model runners."""
-
     @abstractmethod
     async def run(
         self,

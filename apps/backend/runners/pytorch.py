@@ -454,12 +454,10 @@ class PyTorchRunner(ModelRunner):
 
     @classmethod
     def get_supported_tasks(cls) -> list[JobType]:
-        """Get the task types supported by this runner."""
         return [JobType.text_generation, JobType.embeddings]
 
     @classmethod
     def clear_cache(cls) -> None:
-        """Clear the model cache to free memory."""
         logger.info("Clearing PyTorch model cache")
         cls._model_cache.clear()
 

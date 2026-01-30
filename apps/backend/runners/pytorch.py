@@ -402,8 +402,7 @@ class PyTorchRunner(ModelRunner):
 
     @classmethod
     def suggest_model_name(cls, invalid_name: str) -> str | None:
-        """Suggest a correct model name based on invalid input."""
-        # Common corrections for misnamed models
+
         corrections = {
             "distilgpt2-fixed": "distilgpt2",
             "gpt2-small": "gpt2",

@@ -83,7 +83,6 @@ app.include_router(router, prefix="/api")
 
 @app.get("/")
 async def root() -> dict[str, Any]:
-    """Root endpoint."""
     return {"message": "AI Playground Backend", "version": "0.1.0"}
 
 

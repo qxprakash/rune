@@ -52,7 +52,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Cleanup embedded workers on shutdown
     try:
         if "embedded_worker_manager" in globals() and embedded_worker_manager:
             await embedded_worker_manager.stop()

@@ -10,7 +10,6 @@ from loguru import logger
 from api.routes import router
 from db.session import engine
 
-# Global worker manager
 embedded_worker_manager = None
 
 

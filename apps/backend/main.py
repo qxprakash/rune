@@ -15,7 +15,6 @@ embedded_worker_manager = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events."""
     logger.info("Starting AI Playground Backend")
 
     try:

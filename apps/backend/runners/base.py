@@ -83,5 +83,4 @@ class ModelRunner(ABC):
     async def run_embeddings(
         self, prompt: str, parameters: dict[str, Any] | None = None
     ) -> RunResult:
-        """Generate embeddings for text."""
         return await self.run(prompt, JobType.embeddings, None, parameters)

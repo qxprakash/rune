@@ -144,7 +144,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["ollama"] = runner_class.list_available_models()  # type: ignore
+                discovered["ollama"] = runner_class.list_available_models()
             else:
                 discovered["ollama"] = []
         except Exception as e:
@@ -157,7 +157,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["mlx"] = runner_class.list_available_models()  # type: ignore
+                discovered["mlx"] = runner_class.list_available_models()
             else:
                 discovered["mlx"] = []
         except Exception as e:
@@ -170,7 +170,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("test")
             if runner.is_available():
-                discovered["pytorch"] = runner_class.list_available_models()  # type: ignore
+                discovered["pytorch"] = runner_class.list_available_models()
             else:
                 discovered["pytorch"] = []
         except Exception as e:
@@ -183,7 +183,7 @@ async def discover_models() -> dict[str, list[str]]:
         try:
             runner = runner_class("openai/whisper-tiny")
             if runner.is_available():
-                discovered["whisper"] = runner_class.list_available_models()  # type: ignore
+                discovered["whisper"] = runner_class.list_available_models()
             else:
                 discovered["whisper"] = []
         except Exception as e:

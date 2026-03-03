@@ -159,7 +159,6 @@ async def discover_models() -> dict[str, list[str]]:
             logger.error(f"Failed to discover MLX models: {e}")
             discovered["mlx"] = []
 
-    # Discover PyTorch models
     if ModelBackend.pytorch in RUNNERS:
         runner_class = RUNNERS[ModelBackend.pytorch]
         try:
@@ -172,7 +171,6 @@ async def discover_models() -> dict[str, list[str]]:
             logger.error(f"Failed to discover PyTorch models: {e}")
             discovered["pytorch"] = []
 
-    # Discover Whisper models
     if ModelBackend.whisper in RUNNERS:
         runner_class = RUNNERS[ModelBackend.whisper]
         try:

@@ -133,10 +133,8 @@ async def list_models(
 
 @router.get("/models/discover", response_model=dict[str, list[str]])
 async def discover_models() -> dict[str, list[str]]:
-    """Auto-discover available models from different backends."""
     discovered = {}
 
-    # Discover Ollama models
     if ModelBackend.ollama in RUNNERS:
         runner_class = RUNNERS[ModelBackend.ollama]
         try:
@@ -149,7 +147,6 @@ async def discover_models() -> dict[str, list[str]]:
             logger.error(f"Failed to discover Ollama models: {e}")
             discovered["ollama"] = []
 
-    # Discover MLX models
     if ModelBackend.mlx in RUNNERS:
         runner_class = RUNNERS[ModelBackend.mlx]
         try:

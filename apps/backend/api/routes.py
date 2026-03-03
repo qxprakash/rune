@@ -93,8 +93,6 @@ async def create_model(
     model_data: ModelCreate,
     db: Session = Depends(get_session),
 ) -> ModelResponse:
-    """Create a new model."""
-    # Check if model with same name already exists
     existing = ai_crud.get_model_by_name(db, name=model_data.name)
     if existing:
         raise HTTPException(

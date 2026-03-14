@@ -24,7 +24,6 @@ def test_model_deregistration():
             models = models_data["models"]
             print(f"✅ Found {len(models)} models in system")
 
-            # Show models with their status
             for model in models[:5]:  # Show first 5
                 status = "Active" if model["is_active"] else "Inactive"
                 print(f"  📦 {model['name']} - {status} (ID: {model['id'][:8]}...)")

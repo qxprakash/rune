@@ -227,7 +227,7 @@ async def register_discovered_models(
             }
         elif backend == ModelBackend.whisper:
             config = {
-                "language": None,  # Auto-detect
+                "language": None,
                 "task": "transcribe",
                 "return_timestamps": False,
             }

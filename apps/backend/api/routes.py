@@ -253,7 +253,6 @@ async def get_model(
     model_id: uuid.UUID,
     db: Session = Depends(get_session),
 ) -> ModelResponse:
-    """Get a specific model by ID."""
     model = ai_crud.get_model(db, model_id=model_id)
     if not model:
         raise HTTPException(
@@ -269,7 +268,6 @@ async def update_model(
     model_data: ModelUpdate,
     db: Session = Depends(get_session),
 ) -> ModelResponse:
-    """Update a model."""
     model = ai_crud.update_model(
         db,
         model_id=model_id,

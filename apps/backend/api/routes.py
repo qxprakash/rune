@@ -34,7 +34,6 @@ from utils.system_monitor import SystemMonitor
 
 router = APIRouter()
 
-# Runner mapping
 RUNNERS = {
     ModelBackend.ollama: OllamaRunner,
     ModelBackend.mlx: MLXRunner,
@@ -45,9 +44,7 @@ RUNNERS = {
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
-    """Health check endpoint."""
     try:
-        # Test database connection
         from sqlalchemy import text
 
         db.execute(text("SELECT 1"))
@@ -59,7 +56,6 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
     runners_status = {}
     for backend, runner_class in RUNNERS.items():
         try:
-            # Create temporary instance to check availability
             if backend == ModelBackend.ollama:
                 runner = runner_class("test")
                 runners_status[backend.value] = runner.is_available()

@@ -81,9 +81,6 @@ async def health_check(db: Session = Depends(get_session)) -> HealthResponse:
     )
 
 
-# Model Management Routes
-
-
 @router.post("/models", response_model=ModelResponse, status_code=status.HTTP_201_CREATED)
 async def create_model(
     model_data: ModelCreate,

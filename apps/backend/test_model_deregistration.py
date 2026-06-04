@@ -66,6 +66,7 @@ def test_model_deregistration():
         print(f"❌ Error creating test model: {e}")
         return
 
+    # Test 3: Try deregistration without force (should check for active jobs)
     print(f"\n3. Testing deregistration without force...")
     try:
         response = requests.delete(f"{base_url}/models/{test_model_id}/deregister")
